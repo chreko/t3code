@@ -1009,10 +1009,22 @@ export function deriveEffectiveComposerModelState(input: {
   selectedInstanceId?: ProviderInstanceId | null | undefined;
   threadModelSelection: ModelSelection | null | undefined;
   projectModelSelection: ModelSelection | null | undefined;
+  /**
+   * The model and options the provider's own configuration pins for this
+   * workspace. Seeds a composer that has no explicit pick yet; a thread or
+   * project selection still wins, so changing the model in the picker sticks.
+   */
+  configuredModelDefault?:
+    | { readonly slug: string | null; readonly options: ReadonlyArray<ProviderOptionSelection> }
+    | null
+    | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
   const baseModelCandidate =
-    input.threadModelSelection?.model ?? input.projectModelSelection?.model ?? null;
+    input.threadModelSelection?.model ??
+    input.projectModelSelection?.model ??
+    input.configuredModelDefault?.slug ??
+    null;
   const baseModel =
     (input.selectedInstanceId
       ? resolveAppModelSelectionForInstance(
@@ -1057,10 +1069,15 @@ export function deriveEffectiveComposerModelState(input: {
         activeSelection.model,
       ))
     : baseModel;
+  const configuredOptions =
+    input.selectedInstanceId && (input.configuredModelDefault?.options.length ?? 0) > 0
+      ? { [input.selectedInstanceId]: input.configuredModelDefault!.options }
+      : null;
   const modelOptions =
     modelSelectionByProviderToOptions(input.draft?.modelSelectionByProvider) ??
     providerSelectionsFromModelSelection(input.threadModelSelection) ??
     providerSelectionsFromModelSelection(input.projectModelSelection) ??
+    configuredOptions ??
     null;
 
   return {
@@ -3667,6 +3684,15 @@ export function useEffectiveComposerModelState(input: {
   selectedInstanceId?: ProviderInstanceId | null | undefined;
   threadModelSelection: ModelSelection | null | undefined;
   projectModelSelection: ModelSelection | null | undefined;
+  /**
+   * The model and options the provider's own configuration pins for this
+   * workspace. Seeds a composer that has no explicit pick yet; a thread or
+   * project selection still wins, so changing the model in the picker sticks.
+   */
+  configuredModelDefault?:
+    | { readonly slug: string | null; readonly options: ReadonlyArray<ProviderOptionSelection> }
+    | null
+    | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
   const draft = useComposerDraftModelState(input.threadRef ?? input.draftId ?? DraftId.make(""));
@@ -3680,10 +3706,12 @@ export function useEffectiveComposerModelState(input: {
         selectedInstanceId: input.selectedInstanceId,
         threadModelSelection: input.threadModelSelection,
         projectModelSelection: input.projectModelSelection,
+        configuredModelDefault: input.configuredModelDefault,
         settings: input.settings,
       }),
     [
       draft,
+      input.configuredModelDefault,
       input.providers,
       input.settings,
       input.projectModelSelection,

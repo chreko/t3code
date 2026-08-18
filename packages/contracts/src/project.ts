@@ -81,6 +81,35 @@ export const ProjectListEntriesResult = Schema.Struct({
 });
 export type ProjectListEntriesResult = typeof ProjectListEntriesResult.Type;
 
+/**
+ * The model and effort a provider's own configuration pins for a workspace.
+ * Raw as configured — the client resolves these against the model list it
+ * already holds, so the server needs no model catalog.
+ */
+export const ClaudeConfiguredModelValues = Schema.Struct({
+  model: Schema.NullOr(TrimmedNonEmptyString),
+  effort: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ClaudeConfiguredModelValues = typeof ClaudeConfiguredModelValues.Type;
+
+export const ProjectConfiguredModelDefaultsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+});
+export type ProjectConfiguredModelDefaultsInput = typeof ProjectConfiguredModelDefaultsInput.Type;
+
+export const OpenCodeConfiguredModelValues = Schema.Struct({
+  model: TrimmedNonEmptyString,
+});
+export type OpenCodeConfiguredModelValues = typeof OpenCodeConfiguredModelValues.Type;
+
+export const ProjectConfiguredModelDefaultsResult = Schema.Struct({
+  /** `null` when Claude's settings pin neither a model nor an effort. */
+  claude: Schema.NullOr(ClaudeConfiguredModelValues),
+  /** `null` when OpenCode's config pins no model. */
+  opencode: Schema.NullOr(OpenCodeConfiguredModelValues),
+});
+export type ProjectConfiguredModelDefaultsResult = typeof ProjectConfiguredModelDefaultsResult.Type;
+
 export const ProjectEntriesFailure = Schema.Literals([
   "workspace_root_not_found",
   "workspace_root_create_failed",

@@ -66,6 +66,14 @@ export function createProjectEnvironmentAtoms<R, E>(
       staleTimeMs: 30_000,
       idleTtlMs: 5 * 60_000,
     }),
+    // The model a provider's own config pins for a workspace. Seeds a composer
+    // that has no explicit pick yet; an explicit pick still wins.
+    configuredModelDefaults: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:projects:configured-model-defaults",
+      tag: WS_METHODS.projectsConfiguredModelDefaults,
+      staleTimeMs: 30_000,
+      idleTtlMs: 5 * 60_000,
+    }),
     readFile: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:projects:read-file",
       tag: WS_METHODS.projectsReadFile,

@@ -84,6 +84,7 @@ import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
+import * as ConfiguredModelDefaultsLoader from "./provider/ConfiguredModelDefaultsLoader.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -378,6 +379,8 @@ const makeWsRpcLayer = (
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+      const configuredModelDefaults =
+        yield* ConfiguredModelDefaultsLoader.ConfiguredModelDefaultsLoader;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
@@ -1802,6 +1805,28 @@ const makeWsRpcLayer = (
                   }),
               ),
             ),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.projectsConfiguredModelDefaults]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.projectsConfiguredModelDefaults,
+            Effect.gen(function* () {
+              // Settings that cannot be read pin nothing, which leaves the
+              // app's own model selection in charge — the same outcome as a
+              // workspace with no Claude settings file.
+              const settings = yield* serverSettings.getSettings.pipe(
+                Effect.orElseSucceed(() => null),
+              );
+              const opencode = yield* configuredModelDefaults.loadOpenCode({
+                workspaceRoot: input.cwd,
+              });
+              if (settings === null) return { claude: null, opencode };
+              const claude = yield* configuredModelDefaults.loadClaude({
+                workspaceRoot: input.cwd,
+                claudeHomePath: settings.providers.claudeAgent.homePath,
+              });
+              return { claude, opencode };
+            }),
             { "rpc.aggregate": "workspace" },
           ),
         [WS_METHODS.projectsReadFile]: (input) =>

@@ -100,6 +100,8 @@ import {
 } from "./relayClient.ts";
 import {
   ProjectListEntriesError,
+  ProjectConfiguredModelDefaultsInput,
+  ProjectConfiguredModelDefaultsResult,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
   ProjectReadFileError,
@@ -199,6 +201,7 @@ export const WS_METHODS = {
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
   projectsListEntries: "projects.listEntries",
+  projectsConfiguredModelDefaults: "projects.configuredModelDefaults",
   projectsReadFile: "projects.readFile",
   projectsSearchContents: "projects.searchContents",
   projectsSearchEntries: "projects.searchEntries",
@@ -636,6 +639,15 @@ export const WsProjectsListEntriesRpc = Rpc.make(WS_METHODS.projectsListEntries,
   error: Schema.Union([ProjectListEntriesError, EnvironmentAuthorizationError]),
 });
 
+export const WsProjectsConfiguredModelDefaultsRpc = Rpc.make(
+  WS_METHODS.projectsConfiguredModelDefaults,
+  {
+    payload: ProjectConfiguredModelDefaultsInput,
+    success: ProjectConfiguredModelDefaultsResult,
+    error: Schema.Union([EnvironmentAuthorizationError]),
+  },
+);
+
 export const WsProjectsReadFileRpc = Rpc.make(WS_METHODS.projectsReadFile, {
   payload: ProjectReadFileInput,
   success: ProjectReadFileResult,
@@ -1027,6 +1039,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,
   WsProjectsListEntriesRpc,
+  WsProjectsConfiguredModelDefaultsRpc,
   WsProjectsReadFileRpc,
   WsProjectsSearchContentsRpc,
   WsProjectsSearchEntriesRpc,
