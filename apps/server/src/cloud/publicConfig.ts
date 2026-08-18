@@ -208,8 +208,8 @@ export function makeCloudCliOAuthConfig({
 
 export const cloudCliOAuthConfig = makeCloudCliOAuthConfig();
 
-export const hasCloudPublicConfig = Boolean(
-  (normalizeSecureRelayUrl(process.env.T3CODE_RELAY_URL ?? "") ?? buildTimeRelayUrl) &&
-  (process.env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() || buildTimeClerkPublishableKey) &&
-  (process.env.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID?.trim() || buildTimeClerkCliOAuthClientId),
-);
+// T3 Connect is disabled in this build. Hard-wired off rather than derived from
+// the environment, so neither a build-time key nor a runtime T3CODE_RELAY_URL /
+// T3CODE_CLERK_* variable can register the `t3 connect` commands or start a
+// managed relay link. The server parks the cloud link instead.
+export const hasCloudPublicConfig = false;

@@ -66,11 +66,10 @@ export function resolveDesktopClerkFrontendApiHostname(
   }
 }
 
-export const desktopClerkFrontendApiHostname = resolveDesktopClerkFrontendApiHostname(
-  typeof __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__ === "undefined"
-    ? undefined
-    : __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__,
-);
+// T3 Connect is disabled in this build, so no Clerk hostname is resolved and the
+// Electron CSP never gains a Clerk origin. `resolveDesktopClerkFrontendApiHostname`
+// stays exported for its tests and for a fork that re-enables Connect.
+export const desktopClerkFrontendApiHostname: string | undefined = undefined;
 
 export function createDesktopClerkBridge(stateDir: string, isDevelopment: boolean) {
   return createClerkBridge({
