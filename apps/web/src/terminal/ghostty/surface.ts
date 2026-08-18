@@ -487,6 +487,14 @@ export interface GhosttyTerminalSurfaceOptions {
    * reporting. The host owns the menu, so it also owns preventing the browser
    * default — whose Paste entry can never reach a canvas terminal.
    */
+  /**
+   * Reads the clipboard for the paste shortcut. The renderer's async Clipboard
+   * API is denied to a Ctrl/Alt chord — Chromium will not count one as a user
+   * gesture — and these chords are not native paste bindings, so there is no
+   * paste event to fall back on. The desktop host supplies a reader that goes
+   * through the main process instead; without one the Clipboard API is used.
+   */
+  readonly readClipboardText?: () => Promise<string>;
   readonly onContextMenu?: (event: MouseEvent) => void;
 }
 
@@ -1004,15 +1012,19 @@ export class GhosttyTerminalSurface {
     }
     if (isTerminalPasteShortcut(event)) {
       this.suppressedKeyCodes.add(event.code);
+      const hostRead = this.options.readClipboardText;
       const clipboard = navigator.clipboard;
-      if (typeof clipboard?.readText === "function") {
+      const readText =
+        hostRead ??
+        (typeof clipboard?.readText === "function" ? () => clipboard.readText() : undefined);
+      if (readText) {
         // Race the async clipboard read against the browser's own paste event:
         // the native event (dispatched synchronously with the default action)
         // always claims the token first when it fires, and the read covers
         // browsers whose paste shortcut produces no paste event. Not preventing
         // the default keeps the native path alive when the read is denied.
         const token = ++this.pasteShortcutToken;
-        void clipboard.readText().then(
+        void readText().then(
           (text) => {
             if (this.disposed || this.pasteShortcutToken !== token) return;
             this.pasteShortcutToken += 1;

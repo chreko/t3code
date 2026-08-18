@@ -496,6 +496,10 @@ export function TerminalViewport({
         onContextMenu: (event) => {
           if (terminalRef.current) void showTerminalContextMenu(event);
         },
+        // Absent in the browser, which leaves the surface on the Clipboard API.
+        ...(window.desktopBridge?.readClipboardText
+          ? { readClipboardText: () => window.desktopBridge!.readClipboardText!() }
+          : {}),
       };
       const terminal = await GhosttyTerminalSurface.create(mount, terminalOptions);
       if (cancelled) {

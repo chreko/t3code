@@ -1051,6 +1051,12 @@ export interface DesktopBridge {
   // The primary backend is identified by id === PRIMARY_LOCAL_ENVIRONMENT_ID.
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
   getLocalEnvironmentBearerToken: () => Promise<string>;
+  /**
+   * Clipboard text read in the main process, for the terminal's paste
+   * shortcuts. The renderer's async Clipboard API is denied to a Ctrl/Alt
+   * chord, which Chromium will not treat as a user gesture.
+   */
+  readClipboardText?: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
   getConnectionCatalog?: () => Promise<string | null>;

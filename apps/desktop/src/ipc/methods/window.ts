@@ -265,6 +265,16 @@ export const showContextMenu = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const readClipboardText = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.READ_CLIPBOARD_TEXT_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.String,
+  handler: Effect.fn("desktop.ipc.window.readClipboardText")(function* () {
+    const shell = yield* ElectronShell.ElectronShell;
+    return yield* shell.readClipboardText;
+  }),
+});
+
 export const openExternal = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.OPEN_EXTERNAL_CHANNEL,
   payload: Schema.String,

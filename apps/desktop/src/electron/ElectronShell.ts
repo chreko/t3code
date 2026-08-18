@@ -35,6 +35,7 @@ export class ElectronShell extends Context.Service<
   {
     readonly openExternal: (rawUrl: unknown) => Effect.Effect<boolean>;
     readonly copyText: (text: string) => Effect.Effect<void>;
+    readonly readClipboardText: Effect.Effect<string>;
   }
 >()("@t3tools/desktop/electron/ElectronShell") {}
 
@@ -54,6 +55,10 @@ export const make = ElectronShell.of({
     Effect.sync(() => {
       Electron.clipboard.writeText(text);
     }),
+  // Reading here bypasses the renderer's async Clipboard API, which Chromium
+  // denies to a Ctrl/Alt chord because it refuses to count one as a user
+  // gesture.
+  readClipboardText: Effect.sync(() => Electron.clipboard.readText()),
 });
 
 export const layer = Layer.succeed(ElectronShell, make);
