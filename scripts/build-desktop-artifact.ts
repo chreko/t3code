@@ -775,6 +775,7 @@ interface StagePackageJson {
   readonly packageManager: string;
   readonly description: string;
   readonly author: string;
+  readonly homepage: string;
   readonly main: string;
   readonly build: Record<string, unknown>;
   readonly dependencies: Record<string, unknown>;
@@ -2127,6 +2128,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           StartupWMClass: "t3code",
         },
       },
+      // Required by fpm for deb/rpm. Unused by AppImage.
+      maintainer: "T3 Code local build <t3code@localhost>",
     };
   }
 
@@ -2903,6 +2906,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     packageManager: rootPackageJson.packageManager,
     description: "T3 Code desktop build",
     author: "T3 Tools",
+    // fpm (deb/rpm) refuses to build without a homepage and a maintainer. The
+    // AppImage target never needed either, so this is only exercised by the
+    // Linux package targets.
+    homepage: "https://github.com/pingdotgg/t3code",
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
       options.platform,
