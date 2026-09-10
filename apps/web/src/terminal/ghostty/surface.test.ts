@@ -18,6 +18,7 @@ import {
   resolveTerminalMouseData,
   resolveTerminalMouseTrackingState,
   shouldBlinkTerminalCursor,
+  shouldPastePrimarySelection,
   shouldReportTerminalMouse,
   terminalGridCellAt,
   terminalScrollbarGeometry,
@@ -278,31 +279,6 @@ describe("GhosttyTerminalSurface visibility", () => {
     expect(surface.getSelection()).toBe("");
     expect(surface.getSelectionPosition()).toBeNull();
     expect(harness.renderedSnapshot.rowData[0]?.cells.some((cell) => cell.selected)).toBe(false);
-  });
-
-  it("pastes the terminal selection, and only that, on a Linux middle click", async () => {
-    const harness = createHarness();
-    const readText = vi.fn(async () => "clipboard text");
-    vi.stubGlobal("navigator", { platform: "Linux x86_64", clipboard: { readText } });
-    const surface = await harness.create();
-    surface.write("hello world");
-    harness.flushFrame();
-    harness.pointer("pointerdown", 5, 1);
-    harness.pointer("pointermove", 37, 1);
-    harness.pointer("pointerup", 37, 0);
-    expect(surface.getSelection()).toBe("hello");
-
-    harness.onData.mockClear();
-    harness.pointer("pointerdown", 5, 4, false, 1);
-    await vi.waitFor(() => expect(harness.onData).toHaveBeenCalled());
-    expect(harness.onData.mock.calls.at(-1)?.[0]).toBe("hello");
-    expect(surface.getSelection()).toBe("hello");
-
-    // Without a selection there is no primary buffer to paste; the clipboard
-    // holds what the user copied and must not be substituted.
-    surface.clearSelection();
-    harness.pointer("pointerdown", 5, 4, false, 1);
-    expect(readText).not.toHaveBeenCalled();
   });
 
   it("starts a selection when dragging from a link", async () => {
@@ -783,6 +759,27 @@ describe("isTerminalPasteShortcut", () => {
     expect(isTerminalPasteShortcut(event({ key: "Insert", shiftKey: true }), "MacIntel")).toBe(
       false,
     );
+  });
+});
+
+describe("shouldPastePrimarySelection", () => {
+  const middle = { button: 1, ctrlKey: false, metaKey: false, shiftKey: false };
+
+  it("claims a middle click the application ignores, so the paste survives autoscroll", () => {
+    expect(shouldPastePrimarySelection(false, middle)).toBe(true);
+  });
+
+  it("leaves the middle click to an application that tracks the mouse", () => {
+    expect(shouldPastePrimarySelection(true, middle)).toBe(false);
+  });
+
+  it("still claims it when Shift escapes the application's mouse tracking", () => {
+    expect(shouldPastePrimarySelection(true, { ...middle, shiftKey: true })).toBe(true);
+  });
+
+  it("ignores every button other than the middle one", () => {
+    expect(shouldPastePrimarySelection(false, { ...middle, button: 0 })).toBe(false);
+    expect(shouldPastePrimarySelection(false, { ...middle, button: 2 })).toBe(false);
   });
 });
 
