@@ -18,7 +18,6 @@ import {
   resolveTerminalMouseData,
   resolveTerminalMouseTrackingState,
   shouldBlinkTerminalCursor,
-  shouldPastePrimarySelection,
   shouldReportTerminalMouse,
   terminalGridCellAt,
   terminalScrollbarGeometry,
@@ -759,27 +758,6 @@ describe("isTerminalPasteShortcut", () => {
     expect(isTerminalPasteShortcut(event({ key: "Insert", shiftKey: true }), "MacIntel")).toBe(
       false,
     );
-  });
-});
-
-describe("shouldPastePrimarySelection", () => {
-  const middle = { button: 1, ctrlKey: false, metaKey: false, shiftKey: false };
-
-  it("claims a middle click the application ignores, so the paste survives autoscroll", () => {
-    expect(shouldPastePrimarySelection(false, middle)).toBe(true);
-  });
-
-  it("leaves the middle click to an application that tracks the mouse", () => {
-    expect(shouldPastePrimarySelection(true, middle)).toBe(false);
-  });
-
-  it("still claims it when Shift escapes the application's mouse tracking", () => {
-    expect(shouldPastePrimarySelection(true, { ...middle, shiftKey: true })).toBe(true);
-  });
-
-  it("ignores every button other than the middle one", () => {
-    expect(shouldPastePrimarySelection(false, { ...middle, button: 0 })).toBe(false);
-    expect(shouldPastePrimarySelection(false, { ...middle, button: 2 })).toBe(false);
   });
 });
 

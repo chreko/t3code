@@ -424,19 +424,6 @@ export function shouldReportTerminalMouse(
   return tracking && !event.shiftKey && !event.ctrlKey && !event.metaKey;
 }
 
-/**
- * Whether a middle click should paste the X11 primary selection. Only claims
- * the click the running application did not ask for, so a mouse-tracking
- * program (vim, tmux) still receives button 3 — unless Shift escapes its
- * tracking, as it does for the other mouse gestures here.
- */
-export function shouldPastePrimarySelection(
-  mouseTracking: boolean,
-  event: Pick<MouseEvent, "button" | "ctrlKey" | "metaKey" | "shiftKey">,
-): boolean {
-  return event.button === 1 && !shouldReportTerminalMouse(mouseTracking, event);
-}
-
 type TerminalMouseAction = "press" | "release" | "motion";
 
 export function resolveTerminalMouseData(
@@ -1577,13 +1564,6 @@ export class GhosttyTerminalSurface {
 
   private readonly onMouseDown = (event: MouseEvent) => {
     if (event.button === 0) event.preventDefault();
-    // Chromium pastes the X11 primary selection into the focused textarea when
-    // the middle button is released, which is how middle-click paste reaches
-    // the terminal. Left to its default the press arms middle-click autoscroll
-    // instead, and tearing that down on release swallows the paste.
-    if (shouldPastePrimarySelection(this.core.isMouseTracking(), event)) {
-      event.preventDefault();
-    }
     this.focus();
   };
 
