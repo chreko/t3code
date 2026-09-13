@@ -99,9 +99,11 @@ operator account makes all of this unnecessary; the export is then harmless.)
 
 ## 4. Deliver
 
-1. Refresh the template restore set so a rebuild ships this build, not the old one:
-   `rm ~/git/qubes-backup/Fedora-Template/Packages/T3-Code-*.rpm && cp dist/T3-Code-$V-x86_64.rpm ~/git/qubes-backup/Fedora-Template/Packages/`
-   (gitignored there; nothing to commit).
+1. The template restore set already follows the new build:
+   `~/git/qubes-backup/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm` is a symlink to
+   `dist/T3-Code-latest-x86_64.rpm`, and the bundle step there copies with a dereferencing
+   `cp`. Do not copy rpm files into that directory. Confirm with
+   `rpm -qp --qf '%{VERSION}\n' ~/git/qubes-backup/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm`.
 2. `qvm-copy dist/T3-Code-$V-x86_64.rpm` and tell the user to pick the template
    (`qubesdb-read /qubes-base-template`, currently `fedora-44-xfce`) in the picker and
    approve the dom0 dialog.
