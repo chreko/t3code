@@ -66,6 +66,7 @@ describe("composerSubmissionIntentForEnter", () => {
       composerSubmissionIntentForEnter({
         isMobileViewport: false,
         shiftKey: false,
+        altKey: false,
         modifierKey: false,
         isDraftThread: true,
       }),
@@ -77,6 +78,7 @@ describe("composerSubmissionIntentForEnter", () => {
       composerSubmissionIntentForEnter({
         isMobileViewport: true,
         shiftKey: false,
+        altKey: false,
         modifierKey: false,
         isDraftThread: true,
       }),
@@ -88,6 +90,19 @@ describe("composerSubmissionIntentForEnter", () => {
       composerSubmissionIntentForEnter({
         isMobileViewport: false,
         shiftKey: true,
+        altKey: false,
+        modifierKey: false,
+        isDraftThread: true,
+      }),
+    ).toBeNull();
+  });
+
+  it("inserts a newline for Alt+Enter", () => {
+    expect(
+      composerSubmissionIntentForEnter({
+        isMobileViewport: false,
+        shiftKey: false,
+        altKey: true,
         modifierKey: false,
         isDraftThread: true,
       }),
@@ -99,6 +114,7 @@ describe("composerSubmissionIntentForEnter", () => {
       composerSubmissionIntentForEnter({
         isMobileViewport: false,
         shiftKey: false,
+        altKey: false,
         modifierKey: true,
         isDraftThread: true,
       }),
@@ -110,6 +126,7 @@ describe("composerSubmissionIntentForEnter", () => {
       composerSubmissionIntentForEnter({
         isMobileViewport: false,
         shiftKey: false,
+        altKey: false,
         modifierKey: true,
         isDraftThread: false,
       }),

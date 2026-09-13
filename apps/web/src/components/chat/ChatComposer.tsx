@@ -3787,6 +3787,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     const intent = composerSubmissionIntentForEnter({
       isMobileViewport,
       shiftKey: false,
+      altKey: false,
       modifierKey: true,
       isDraftThread: routeKind === "draft",
     });
@@ -3957,6 +3958,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         ? composerSubmissionIntentForEnter({
             isMobileViewport,
             shiftKey: event.shiftKey,
+            altKey: event.altKey,
             modifierKey: event.metaKey || event.ctrlKey,
             isDraftThread: routeKind === "draft",
           })

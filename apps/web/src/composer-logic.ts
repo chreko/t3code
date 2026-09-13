@@ -26,10 +26,11 @@ export function formatAssistantCitationForComposer(citation: AssistantCitation, 
 export function composerSubmissionIntentForEnter(input: {
   isMobileViewport: boolean;
   shiftKey: boolean;
+  altKey: boolean;
   modifierKey: boolean;
   isDraftThread: boolean;
 }): ComposerSubmissionIntent | null {
-  if (input.isMobileViewport || input.shiftKey) {
+  if (input.isMobileViewport || input.shiftKey || input.altKey) {
     return null;
   }
   return input.modifierKey && input.isDraftThread ? "background" : "foreground";
