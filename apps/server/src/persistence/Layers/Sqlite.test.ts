@@ -7,10 +7,17 @@ import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { SqlitePersistenceMemory, makeSqlitePersistenceLive } from "./Sqlite.ts";
+import {
+  ServerStateInUseError,
+  SqlitePersistenceMemory,
+  acquireServerStateLock,
+  makeSqlitePersistenceLive,
+} from "./Sqlite.ts";
 
 const lockHolderSource = `
 const { DatabaseSync } = require("node:sqlite");
@@ -54,6 +61,24 @@ it.effect("waits out a concurrent writer instead of failing with SQLITE_BUSY", (
   }).pipe(
     Effect.provide(makeSqlitePersistenceLive(dbPath).pipe(Layer.provide(NodeServices.layer))),
     Effect.ensuring(Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true }))),
+  );
+});
+
+it.effect("lets only one server at a time hold a state directory", () => {
+  const stateDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-server-lock-"));
+
+  return Effect.gen(function* () {
+    const firstServer = yield* Scope.make();
+    yield* acquireServerStateLock(stateDir).pipe(Scope.provide(firstServer));
+
+    const error = yield* acquireServerStateLock(stateDir).pipe(Effect.scoped, Effect.flip);
+    assert.instanceOf(error, ServerStateInUseError);
+
+    yield* Scope.close(firstServer, Exit.void);
+    yield* acquireServerStateLock(stateDir).pipe(Effect.scoped);
+  }).pipe(
+    Effect.provide(NodeServices.layer),
+    Effect.ensuring(Effect.sync(() => NodeFS.rmSync(stateDir, { recursive: true, force: true }))),
   );
 });
 
