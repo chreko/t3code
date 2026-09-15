@@ -22,7 +22,8 @@ export {
 } from "../rpc/http.ts";
 export type RemoteEnvironmentAuthError = RemoteEnvironmentRequestError;
 
-const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 10_000;
+// A remote host under heavy disk IO can take 10-20 s to persist a new auth session.
+const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 const clientMetadataTokenExchangeFields = (
   clientMetadata: AuthClientPresentationMetadata | undefined,
