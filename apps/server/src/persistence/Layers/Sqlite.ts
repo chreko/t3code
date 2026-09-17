@@ -6,32 +6,10 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runMigrations } from "../Migrations.ts";
 import { ServerConfig } from "../../config.ts";
-
-type RuntimeSqliteLayerConfig = {
-  readonly filename: string;
-  readonly spanAttributes?: Record<string, unknown>;
-};
-
-type Loader = {
-  layer: (config: RuntimeSqliteLayerConfig) => Layer.Layer<SqlClient.SqlClient, SqlError>;
-};
-const defaultSqliteClientLoaders = {
-  bun: () => import("@effect/sql-sqlite-bun/SqliteClient"),
-  node: () => import("@t3tools/shared/nodeSqliteClient"),
-} satisfies Record<string, () => Promise<Loader>>;
-
-const makeRuntimeSqliteLayer = Effect.fn("makeRuntimeSqliteLayer")(function* (
-  config: RuntimeSqliteLayerConfig,
-) {
-  const runtime = process.versions.bun !== undefined ? "bun" : "node";
-  const loader = defaultSqliteClientLoaders[runtime];
-  const clientModule = yield* Effect.promise<Loader>(loader);
-  return clientModule.layer(config);
-}, Layer.unwrap);
 
 const setup = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -53,7 +31,7 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
 
   return Layer.provideMerge(
     setup,
-    makeRuntimeSqliteLayer({
+    NodeSqliteClient.layer({
       filename: dbPath,
       spanAttributes: {
         "db.name": path.basename(dbPath),
@@ -87,7 +65,7 @@ export const acquireServerStateLock = Effect.fn("acquireServerStateLock")(functi
 ) {
   const path = yield* Path.Path;
   const context = yield* Layer.build(
-    makeRuntimeSqliteLayer({ filename: path.join(stateDir, "server.lock") }),
+    NodeSqliteClient.layer({ filename: path.join(stateDir, "server.lock") }),
   );
   const sql = Context.get(context, SqlClient.SqlClient);
   // Exclusive locking mode keeps the lock after COMMIT until the connection closes.
@@ -95,7 +73,7 @@ export const acquireServerStateLock = Effect.fn("acquireServerStateLock")(functi
   yield* sql`BEGIN EXCLUSIVE`.pipe(
     Effect.catchIf(
       // node:sqlite reports SQLITE_BUSY (5) as `errcode`, which the shared
-      // classifier leaves as UnknownError; bun's arrives as LockTimeoutError.
+      // classifier leaves as UnknownError.
       (error) =>
         error.reason._tag === "LockTimeoutError" ||
         (Predicate.hasProperty(error.reason.cause, "errcode") && error.reason.cause.errcode === 5),
@@ -107,7 +85,7 @@ export const acquireServerStateLock = Effect.fn("acquireServerStateLock")(functi
 
 export const SqlitePersistenceMemory = Layer.provideMerge(
   setup,
-  makeRuntimeSqliteLayer({ filename: ":memory:" }),
+  NodeSqliteClient.layer({ filename: ":memory:" }),
 );
 
 export const layerConfig = Layer.unwrap(
