@@ -6,9 +6,13 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 # Refreshing the Fedora RPM
 
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits (T3 Connect
-hard-disabled, rpm/deb metadata for fpm, configured-model default). The rpm is the
-Electron desktop app, built by electron-builder **on eschdorf-ai** and fetched back to
-`dist/`. Nothing builds in this qube: no Rust, no libsecret headers, 8 GB RAM.
+hard-disabled, a server state lock, configured-model default, small terminal and
+composer fixes). The rpm is the Electron desktop app, built by electron-builder **on
+eschdorf-ai** and fetched back to `dist/`. Nothing builds in this qube: no Rust, no
+libsecret headers, 8 GB RAM.
+
+eschdorf-ai runs **Omarchy (Arch)** since 2026-09-14. Anything below that reads like
+Debian — `apt`, `dpkg`, `x86_64-linux-gnu` paths — is Kali-era and no longer applies.
 
 Run everything from the repo root, `/home/user/git/t3code`, on that branch. Only
 `origin/main` is merged; local `main` is never touched.
@@ -22,8 +26,10 @@ git fetch origin main && git merge origin/main --no-edit
 
 Conflicts land in the files the local commits touch: `ChatComposer.tsx` (imports: keep
 both sides), `apps/*/src/cloud/publicConfig.ts` and `DesktopClerk.ts` (keep the
-hard-disabled constants), `scripts/build-desktop-artifact.ts` (keep `homepage` and
-`maintainer`). Resolve with the `resolving-merge-conflicts` skill; never abort.
+hard-disabled constants). Upstream owns `homepage` and `maintainer` in
+`scripts/build-desktop-artifact.ts` as of c13f7d93ff, so take upstream's side there and
+delete ours — including the duplicate keys automerge leaves outside the conflict
+region, which only `tsc` catches. Resolve with the `resolving-merge-conflicts` skill; never abort.
 
 ## 2. Verify, then commit
 
@@ -52,7 +58,7 @@ skill and retry. Read the version after the merge, since upstream bumps it:
 V=$(node -p "require('./apps/desktop/package.json').version")
 ~/.claude/skills/run-on-eschdorf-ai/scripts/push-and-package.sh /home/user/git/t3code fedora \
   --exclude release --exclude .t3 --exclude .claude/worktrees \
-  --build-cmd 'export PATH=$HOME/.local/opt/node24/bin:$PATH PKG_CONFIG_PATH=$HOME/.local/opt/libsecret-dev/usr/lib/x86_64-linux-gnu/pkgconfig
+  --build-cmd 'export LD_LIBRARY_PATH=$HOME/.local/opt/libxcrypt-compat/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
                rm -rf release && corepack pnpm install --frozen-lockfile &&
                corepack pnpm exec node scripts/build-desktop-artifact.ts --platform linux --target $PKG_TARGET --arch x64' \
   --artifact 'release/*.$PKG_TARGET'
@@ -62,8 +68,8 @@ Run it from the repo root (the fetch lands in `./dist/` of the cwd) and in the
 background or with a 10-minute tool timeout: push plus build takes about five minutes
 and the default two-minute Bash timeout kills the local side. The remote side runs in a
 detached tmux session and survives that; the log is `dist/.t3code-rpm-build.log`. Result:
-`dist/T3-Code-$V-x86_64.rpm`. Native mode, fpm is never run. `.claude/worktrees` is
-several GB and the default excludes do not cover it.
+`dist/T3-Code-$V-x86_64.rpm`. `.claude/worktrees` is several GB and the default
+excludes do not cover it.
 
 Then point the stable name at the new build (relative target, so the link stays valid
 wherever `dist/` is mounted or copied):
@@ -73,37 +79,44 @@ ln -sfn T3-Code-$V-x86_64.rpm dist/T3-Code-latest-x86_64.rpm
 ```
 
 `dist/T3-Code-latest-x86_64.rpm` always resolves to the newest build; older versioned
-files stay alongside it.
+files stay alongside it. When upstream has not bumped the version the build overwrites
+the same filename and the link already points at it, so there is nothing to move.
 
 `--frozen-lockfile` failing means the merge left `package.json` and `pnpm-lock.yaml`
 disagreeing: fix the merge, do not drop the flag.
 
-**libsecret on the build box.** The Linux build compiles a browser-secret C helper against
-libsecret. eschdorf-ai (Kali) has the runtime library but `claude` has no sudo for
-`libsecret-1-dev`, so the headers live user-locally and `PKG_CONFIG_PATH` above points at
-them. If the preflight reports `libsecret development headers and pkg-config` missing,
-recreate that directory:
+**`libcrypt.so.1` on the build box — the export above is load-bearing.** electron-builder
+packages the rpm with its own bundled fpm, a Ruby 3.4.3 binary linked against
+`libcrypt.so.1`. Arch's libxcrypt ships only `libcrypt.so.2`; `libcrypt.so.1` comes from
+`libxcrypt-compat`, which is not installed, and `claude` has no sudo. Without
+`LD_LIBRARY_PATH` the build runs for minutes and then dies at the very last step with
+`ruby: error while loading shared libraries: libcrypt.so.1`.
+
+The library is already extracted at `~/.local/opt/libxcrypt-compat/usr/lib/`, verified
+2026-09-26. If it ever goes missing, the clean fix is one operator command:
 
 ```bash
-ssh eschdorf-ai-claude 'set -e; D=$HOME/.local/opt/libsecret-dev; T=$(mktemp -d); cd $T
-  apt-get download libsecret-1-dev; rm -rf $D; mkdir -p $D; dpkg -x ./libsecret-1-dev_*.deb $D
-  PC=$D/usr/lib/x86_64-linux-gnu/pkgconfig
-  sed -i -E "s|^prefix=/usr$|prefix=$D/usr|; /^(Requires|Libs)\.private:/d" $PC/*.pc
-  ln -sfn /usr/lib/x86_64-linux-gnu/libsecret-1.so.0 $D/usr/lib/x86_64-linux-gnu/libsecret-1.so
-  PKG_CONFIG_PATH=$PC pkg-config --exists libsecret-1 && echo ok; rm -rf $T'
+sudo pacman -S libxcrypt-compat     # as chreko, not the claude account
 ```
 
-The private requires only matter for static linking; the helper links dynamically
-against the system `libsecret-1.so.0`. (`sudo apt install libsecret-1-dev` as the
-operator account makes all of this unnecessary; the export is then harmless.)
+The export above then becomes harmless rather than necessary. Without sudo, unpack the
+package into that same directory instead — `pacman -Sp libxcrypt-compat` prints its URL,
+`curl -fLO` it, and `tar -I zstd -xf <pkg>.tar.zst -C $D usr/lib` extracts it. That
+fallback has not been exercised since the Omarchy migration; the extracted directory
+predates it.
+
+**libsecret needs nothing.** The build compiles a browser-secret helper against
+libsecret, and Arch ships the headers in the main package, so `pkg-config --exists
+libsecret-1` already succeeds system-wide. The old Kali `PKG_CONFIG_PATH` export and its
+`~/.local/opt/libsecret-dev` directory are gone and are not needed.
 
 ## 4. Deliver
 
 1. The template restore set already follows the new build:
-   `~/git/qubes-backup/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm` is a symlink to
+   `~/git/qubes-dotfiles/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm` is a symlink to
    `dist/T3-Code-latest-x86_64.rpm`, and the bundle step there copies with a dereferencing
    `cp`. Do not copy rpm files into that directory. Confirm with
-   `rpm -qp --qf '%{VERSION}\n' ~/git/qubes-backup/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm`.
+   `rpm -qp --qf '%{VERSION}\n' ~/git/qubes-dotfiles/Fedora-Template/Packages/T3-Code-latest-x86_64.rpm`.
 2. `qvm-copy dist/T3-Code-$V-x86_64.rpm` and tell the user to pick the template
    (`qubesdb-read /qubes-base-template`, currently `fedora-44-xfce`) in the picker and
    approve the dom0 dialog.
@@ -117,6 +130,10 @@ operator account makes all of this unnecessary; the export is then harmless.)
 - `vp run dist:desktop:linux` builds an AppImage, and not on this machine.
 - Forgetting to move the `latest` symlink, or pointing it at an absolute path.
 - Running the artifact script with bare `node` on the box: `spawn vp ENOENT`. It needs
-  `corepack pnpm exec`, and `~/.local/opt/node24` first on PATH.
+  `corepack pnpm exec`. There is no `~/.local/opt/node24` any more; the box builds with
+  its system Node (v26 at `/usr/bin/node`).
 - Skipping step 2 and packaging a merge that does not typecheck.
 - Removing the old rpm in the template before installing. `dnf install` upgrades.
+- Piping `push-and-package.sh` into `tail` without `set -o pipefail`. The wrapper exits
+  1 and dumps the build log on failure, but the pipeline reports `tail`'s status and the
+  run looks green.
