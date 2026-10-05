@@ -1,13 +1,16 @@
 ---
 name: refreshing-fedora-rpm
-description: Use when the Fedora build branch (local/fedora-build-no-connect) should catch up with upstream main and ship a fresh T3 Code desktop rpm for the Fedora template — "fetch main and merge", "rebuild the rpm", "new package for my template", "update t3code in the template" — or when a merge from origin/main conflicts on this branch.
+description: Use when the Fedora build branch (local/fedora-build-no-connect) should catch up with upstream main and ship a fresh T3 Code desktop rpm for the Fedora template — "any new essential updates?", "fetch main and merge", "rebuild the rpm", "new package for my template", "update t3code in the template" — or when a merge from origin/main conflicts on this branch.
 ---
 
 # Refreshing the Fedora RPM
 
-`local/fedora-build-no-connect` is `origin/main` plus a few local commits (T3 Connect
-hard-disabled, a server state lock, configured-model default, small terminal and
-composer fixes). The rpm is the Electron desktop app, built by electron-builder **on
+`local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
+hard-disabled, a server state lock (`acquireServerStateLock`), the configured-model
+default, terminal middle-click and host-clipboard paste, and a 30 s remote auth
+timeout. Two former patches are retired because upstream now does the same thing:
+packaging `homepage`/`maintainer` (c13f7d93ff) and Alt+Enter as a newline (the
+keybindings resolver in `composer-logic.ts` returns null on `event.altKey`). The rpm is the Electron desktop app, built by electron-builder **on
 eschdorf-ai** and fetched back to `dist/`. Nothing builds in this qube: no Rust, no
 libsecret headers, 8 GB RAM.
 
@@ -17,6 +20,30 @@ Debian — `apt`, `dpkg`, `x86_64-linux-gnu` paths — is Kali-era and no longer
 Run everything from the repo root, `/home/user/git/t3code`, on that branch. Only
 `origin/main` is merged; local `main` is never touched.
 
+## 0. Is anything essential?
+
+```bash
+git fetch origin main
+git log --oneline HEAD..origin/main | wc -l
+git show origin/main:apps/desktop/package.json | grep '"version"'   # vs ours
+git log --oneline HEAD..origin/main | sed -E 's/^[0-9a-f]+ //' \
+  | grep -iE '^(fix|perf)\((server|desktop|sqlite|client|clients|client-runtime|terminal|git)\)'
+```
+
+Essential means at least one of: a version bump (the template then upgrades in place);
+a fix for disk growth, data loss, a crash, a hang, or a stuck thread; or a change to a
+file the fork patches. Mobile, marketing, CI, and connect/relay commits never count:
+this build ships no mobile app and Connect is off. Report what qualifies and why
+before merging.
+
+Then list which of the fork's files upstream also touched. That is where conflicts
+land, and where upstream may have made a fork patch redundant:
+
+```bash
+MB=$(git merge-base HEAD origin/main)
+comm -12 <(git diff --name-only $MB..HEAD | sort) <(git diff --name-only $MB..origin/main | sort)
+```
+
 ## 1. Merge
 
 ```bash
@@ -24,12 +51,23 @@ git status --short          # must be clean apart from untracked scripts/package
 git fetch origin main && git merge origin/main --no-edit
 ```
 
-Conflicts land in the files the local commits touch: `ChatComposer.tsx` (imports: keep
-both sides), `apps/*/src/cloud/publicConfig.ts` and `DesktopClerk.ts` (keep the
-hard-disabled constants). Upstream owns `homepage` and `maintainer` in
-`scripts/build-desktop-artifact.ts` as of c13f7d93ff, so take upstream's side there and
-delete ours — including the duplicate keys automerge leaves outside the conflict
-region, which only `tsc` catches. Resolve with the `resolving-merge-conflicts` skill; never abort.
+Resolve with the `resolving-merge-conflicts` skill; never abort. Before keeping a fork
+hunk, check whether upstream now does the same thing. Two patches have been retired
+that way, and taking upstream's side is the right resolution when it happens.
+
+- `apps/*/src/cloud/publicConfig.ts`, `DesktopClerk.ts`: keep the hard-disabled constants.
+- `ChatComposer.tsx`: resolve hunk by hunk, never `git checkout --theirs` on the whole
+  file. The configured-model-default wiring (`useConfiguredModelDefault`) usually
+  automerges _around_ the conflict, and taking the file wholesale silently drops it.
+- `apps/server/src/server.ts`: upstream imports the Sqlite layer as a namespace
+  (`SqlitePersistence`), so the lock call is `SqlitePersistence.acquireServerStateLock`.
+- `scripts/build-desktop-artifact.ts`: upstream's `homepage`/`maintainer` win.
+- A test file upstream deleted wins the modify/delete if our change was only harness
+  wiring; check the wiring still exists in the real code.
+
+Two failure modes need `tsc` to show up, never conflict markers: automerge duplicating
+a key outside the conflict region, and new upstream test stubs of `ElectronShell`
+missing the fork's `readClipboardText` (add `readClipboardText: Effect.succeed("")`).
 
 ## 2. Verify, then commit
 
@@ -37,14 +75,17 @@ region, which only `tsc` catches. Resolve with the `resolving-merge-conflicts` s
 
 ```bash
 export PATH=$HOME/.nvm/versions/node/v24.13.1/bin:$PWD/node_modules/.bin:$PATH
-vp i                        # fresh clone without node_modules/.bin/vp: corepack pnpm install
+CI=true vp i                # CI=true lets pnpm purge node_modules without a TTY
 for d in apps/web packages/contracts apps/server apps/desktop; do
   echo "== $d: $(cd $d && tsc --noEmit 2>&1 | grep -c 'error TS') errors"; done
-(cd apps/server && vp test run src/server.test.ts)
-(cd apps/web && vp test run --project unit src/components/chat/)
+(cd apps/server && vp test run src/persistence/Layers/Sqlite.test.ts src/orchestration-v2/runtimeLayer.test.ts)
+(cd apps/web && vp test run --project unit src/components/chat/ src/composer-logic.test.ts src/composerConfiguredModelSeed.test.ts)
 ```
 
-Pass = all four counts are 0 and both test runs are green. `tsc` also prints many
+Pass = all four counts are 0 and both test runs are green. The server run carries the
+fork's own lock test ("lets only one server at a time hold a state directory"); upstream
+deleted `src/server.test.ts` with the new orchestrator (#2829). The web run carries the
+Alt+Enter and configured-model tests. `tsc` also prints many
 `suggestion TS3771xx` lines from the Effect language service; those are not errors. No
 repo-wide checks (`vp check`, `vp run -r ...`). Commit as
 `merge: origin/main into the Fedora build`, noting any conflict you resolved.
