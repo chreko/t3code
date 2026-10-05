@@ -99,7 +99,7 @@ skill and retry. Read the version after the merge, since upstream bumps it:
 V=$(node -p "require('./apps/desktop/package.json').version")
 ~/.claude/skills/run-on-eschdorf-ai/scripts/push-and-package.sh /home/user/git/t3code fedora \
   --exclude release --exclude .t3 --exclude .claude/worktrees \
-  --build-cmd 'export LD_LIBRARY_PATH=$HOME/.local/opt/libxcrypt-compat/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+  --build-cmd 'export CI=true LD_LIBRARY_PATH=$HOME/.local/opt/libxcrypt-compat/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
                rm -rf release && corepack pnpm install --frozen-lockfile &&
                corepack pnpm exec node scripts/build-desktop-artifact.ts --platform linux --target $PKG_TARGET --arch x64' \
   --artifact 'release/*.$PKG_TARGET'
@@ -122,6 +122,12 @@ ln -sfn T3-Code-$V-x86_64.rpm dist/T3-Code-latest-x86_64.rpm
 `dist/T3-Code-latest-x86_64.rpm` always resolves to the newest build; older versioned
 files stay alongside it. When upstream has not bumped the version the build overwrites
 the same filename and the link already points at it, so there is nothing to move.
+
+`CI=true` is load-bearing too. When the lockfile moves enough, pnpm asks before
+purging `node_modules`; in the remote tmux session it has a TTY, so it does not abort,
+it waits for an answer forever and the wrapper just keeps printing "still running".
+If a build sits there for more than ten minutes, check
+`ssh eschdorf-ai-claude tmux capture-pane -p -t pkg-t3code-rpm-build` before waiting longer.
 
 `--frozen-lockfile` failing means the merge left `package.json` and `pnpm-lock.yaml`
 disagreeing: fix the merge, do not drop the flag.
