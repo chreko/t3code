@@ -82,11 +82,8 @@ export const make = Effect.gen(function* () {
     const claudeHome = yield* resolveClaudeHomePath({ homePath: input.claudeHomePath }).pipe(
       Effect.provideService(Path.Path, path),
     );
-    const userSettingsPath =
-      input.claudeHomePath.trim().length > 0
-        ? path.join(claudeHome, "settings.json")
-        : path.join(claudeHome, ".claude", "settings.json");
-    const userSettings = yield* readOptionalFile(userSettingsPath);
+    // resolveClaudeHomePath already returns the config dir itself, `~/.claude` included.
+    const userSettings = yield* readOptionalFile(path.join(claudeHome, "settings.json"));
     // The raw values cross the wire; the client resolves them against the model
     // list it already holds from the provider snapshot.
     return mergeClaudeConfiguredValues({ projectSettings, userSettings });

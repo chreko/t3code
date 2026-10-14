@@ -32,8 +32,8 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Ndjson from "effect/unstable/encoding/Ndjson";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as Ndjson from "effect/encoding/Ndjson";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as ResourceMonitorBinary from "./ResourceMonitorBinary.ts";
 import * as ServerConfig from "../config.ts";
@@ -862,7 +862,7 @@ export const make = Effect.fn("resourceTelemetry.nativeTelemetryClient.make")(fu
           reason: Option.getOrElse(current.lastError, () => "sidecar is not running"),
         });
       }
-      const requestId = yield* crypto.randomUUIDv4.pipe(
+      const requestId = yield* crypto.randomUUIDv4().pipe(
         Effect.mapError(
           (cause) =>
             new NativeTelemetryCommandFailed({
@@ -921,7 +921,7 @@ export const make = Effect.fn("resourceTelemetry.nativeTelemetryClient.make")(fu
       });
     }
 
-    const requestId = yield* crypto.randomUUIDv4.pipe(
+    const requestId = yield* crypto.randomUUIDv4().pipe(
       Effect.mapError(
         (cause) =>
           new NativeTelemetryCommandFailed({
@@ -976,11 +976,13 @@ export const make = Effect.fn("resourceTelemetry.nativeTelemetryClient.make")(fu
       });
     }
 
-    const requestId = yield* crypto.randomUUIDv4.pipe(
-      Effect.mapError(
-        (cause) => new NativeTelemetryCommandFailed({ operation: "createRequestId", cause }),
-      ),
-    );
+    const requestId = yield* crypto
+      .randomUUIDv4()
+      .pipe(
+        Effect.mapError(
+          (cause) => new NativeTelemetryCommandFailed({ operation: "createRequestId", cause }),
+        ),
+      );
     const deferred = yield* Deferred.make<
       ReadonlyArray<ResourceMonitorProcessTableEntry>,
       NativeTelemetryClientError

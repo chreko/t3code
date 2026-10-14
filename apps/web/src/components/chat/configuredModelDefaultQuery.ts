@@ -14,7 +14,7 @@ import type {
   ServerProvider,
 } from "@t3tools/contracts";
 import { resolveClaudeConfiguredValues } from "@t3tools/shared/configuredModelDefaults";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { useMemo } from "react";
 
 import { projectEnvironment } from "~/state/projects";

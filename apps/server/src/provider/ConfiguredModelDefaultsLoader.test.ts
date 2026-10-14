@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ConfiguredModelDefaultsLoader from "./ConfiguredModelDefaultsLoader.ts";
 
@@ -41,6 +42,22 @@ it.layer(TestLayer)("ConfiguredModelDefaultsLoader", (it) => {
             claudeHomePath,
           }),
         ).toEqual({ model: "opus[1m]", effort: "high" });
+      }),
+    );
+
+    it.effect("reads ~/.claude/settings.json when no Claude home is configured", () =>
+      Effect.gen(function* () {
+        const loader = yield* ConfiguredModelDefaultsLoader.ConfiguredModelDefaultsLoader;
+        const path = yield* Path.Path;
+        const root = yield* makeTempDir;
+        const home = path.join(root, "user");
+        yield* writeJson(path.join(home, ".claude", "settings.json"), '{"model":"sonnet"}');
+
+        expect(
+          yield* loader
+            .loadClaude({ workspaceRoot: path.join(root, "project"), claudeHomePath: "" })
+            .pipe(Effect.provideService(HostProcess.HomeDirectory, home)),
+        ).toEqual({ model: "sonnet", effort: null });
       }),
     );
 

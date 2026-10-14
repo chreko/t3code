@@ -257,7 +257,7 @@ export const resolveWelcomeBase = Effect.gen(function* () {
 
 const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
-  const randomUUID = crypto.randomUUIDv4;
+  const randomUUID = crypto.randomUUIDv4();
   const serverConfig = yield* ServerConfig.ServerConfig;
   const projects = yield* ProjectService.ProjectService;
   const threads = yield* ThreadManagement.ThreadManagementService;
@@ -537,6 +537,8 @@ const make = (options?: StartupOptions) =>
         ).pipe(Effect.map((targets): AutoBootstrapWelcomeTargets => targets)),
       });
       yield* Effect.logInfo("V2 orchestration recovery completed", recovery);
+      // Runs after activation: the status check fetches every enabled project's
+      // remote, and awaiting it here held command readiness for that long.
       yield* runStartupPhase(
         "projects.auto-pull",
         Effect.gen(function* () {
@@ -544,6 +546,11 @@ const make = (options?: StartupOptions) =>
           const settings = yield* serverSettings.getSettings;
           yield* autoPullProjects(projects, settings);
         }),
+      ).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("Failed to load projects for automatic pull", { cause }),
+        ),
+        forkParked,
       );
 
       const importPendingTranscripts = legacyV1ThreadImporter.importPendingTranscripts.pipe(
