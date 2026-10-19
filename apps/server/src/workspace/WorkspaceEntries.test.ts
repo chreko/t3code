@@ -164,6 +164,35 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
       }),
     );
 
+    it.effect("hides folder links that lead back to a folder on the listed path", () =>
+      // "Expand all folders" loads every folder it expands, so a link that loops would
+      // keep nesting the same entries without end.
+      Effect.gen(function* () {
+        const platform = yield* HostProcess.Platform;
+        if (platform === "win32") return;
+        const cwd = yield* makeTempDir();
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeTextFile(cwd, "a/file.txt");
+        yield* writeTextFile(cwd, "b/file.txt");
+        yield* fileSystem.symlink(".", path.join(cwd, "self"));
+        yield* fileSystem.symlink("..", path.join(cwd, "a/up"));
+        yield* fileSystem.symlink("../b", path.join(cwd, "a/to-b"));
+        yield* fileSystem.symlink("../a", path.join(cwd, "b/to-a"));
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const paths = (directoryPath: string) =>
+          workspaceEntries
+            .list({ cwd, directoryPath })
+            .pipe(Effect.map(({ entries }) => entries.map((entry) => entry.path).toSorted()));
+        expect(yield* paths("")).toEqual(["a", "b"]);
+        // A link into a sibling folder is fine on its own...
+        expect(yield* paths("a")).toEqual(["a/file.txt", "a/to-b"]);
+        // ...but once followed, the sibling's link back is hidden.
+        expect(yield* paths("a/to-b")).toEqual(["a/to-b/file.txt"]);
+      }),
+    );
+
     it.effect("labels the children of wide folders exactly as git does for each child", () =>
       Effect.gen(function* () {
         // Above 1,000 children, listing first asks whether the whole folder is ignored.
