@@ -318,26 +318,50 @@ export const make = Effect.gen(function* () {
               throw new Error("Directory must be inside the workspace and outside .git.");
             }
             const children = await NodeFSP.readdir(directory, { withFileTypes: true });
-            // A symlink is listed as what it points to. One that dangles, or resolves outside
-            // the workspace or into `.git`, could not be opened, so it stays hidden.
+            const isSameOrInside = (parent: string, child: string) => {
+              const relativeChild = path.relative(parent, child);
+              return (
+                relativeChild !== ".." &&
+                !relativeChild.startsWith(`..${path.sep}`) &&
+                !path.isAbsolute(relativeChild)
+              );
+            };
+            // The real folders the requested path passes through, root first. A folder link
+            // back to any of them would nest the same entries under ever-longer paths, which
+            // "Expand all folders" would follow without end.
+            let visitedFolders: Promise<ReadonlyArray<string>> | undefined;
+            const loadVisitedFolders = () =>
+              (visitedFolders ??= Promise.all(
+                target.relativePath
+                  .split("/")
+                  .filter((segment) => segment !== "")
+                  .map((_, index, segments) =>
+                    NodeFSP.realpath(path.join(normalizedCwd, ...segments.slice(0, index + 1))),
+                  ),
+              ).then((folders) => [root, ...folders]));
+            // A symlink is listed as what it points to. One that dangles, resolves outside the
+            // workspace or into `.git`, or leads back to a folder on this path could not be
+            // browsed sensibly, so it stays hidden.
             const resolveSymlinkKind = async (
               name: string,
             ): Promise<ProjectEntry["kind"] | undefined> => {
               const resolved = await NodeFSP.realpath(path.join(directory, name)).catch(
                 () => undefined,
               );
-              if (resolved === undefined) return undefined;
-              const resolvedRelative = path.relative(root, resolved);
               if (
-                resolvedRelative === ".." ||
-                resolvedRelative.startsWith(`..${path.sep}`) ||
-                path.isAbsolute(resolvedRelative) ||
-                resolvedRelative.split(path.sep).includes(".git")
+                resolved === undefined ||
+                !isSameOrInside(root, resolved) ||
+                path.relative(root, resolved).split(path.sep).includes(".git")
               ) {
                 return undefined;
               }
               const stat = await NodeFSP.stat(resolved).catch(() => undefined);
-              return stat?.isDirectory() ? "directory" : stat?.isFile() ? "file" : undefined;
+              if (stat?.isFile()) return "file";
+              if (!stat?.isDirectory()) return undefined;
+              const folders = await loadVisitedFolders();
+              return folders.some((folder) => isSameOrInside(resolved, folder))
+                ? undefined
+                : "directory";
             };
             const kinds = await Promise.all(
               children.map(async (child): Promise<ProjectEntry["kind"] | undefined> => {
