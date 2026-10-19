@@ -117,6 +117,9 @@ const IGNORED_FILES_LIMIT = 200;
 /** Paths sent to one `git check-ignore` call when labelling a folder's children. */
 const IGNORE_CHECK_CHUNK_SIZE = 1000;
 
+/** Children classified at once when listing a folder; each symlink costs a realpath and a stat. */
+const SYMLINK_RESOLVE_BATCH_SIZE = 64;
+
 const resolveBrowseTarget = Effect.fn("WorkspaceEntries.resolveBrowseTarget")(function* (
   input: FilesystemBrowseInput,
   path: Path.Path,
@@ -363,14 +366,23 @@ export const make = Effect.gen(function* () {
                 ? undefined
                 : "directory";
             };
-            const kinds = await Promise.all(
-              children.map(async (child): Promise<ProjectEntry["kind"] | undefined> => {
-                if (child.name === ".git") return undefined;
-                if (child.isDirectory()) return "directory";
-                if (child.isFile()) return "file";
-                return child.isSymbolicLink() ? resolveSymlinkKind(child.name) : undefined;
-              }),
-            );
+            // A pnpm `node_modules` holds a link per package. Resolving them in batches keeps
+            // a large folder from queueing thousands of calls ahead of other filesystem work.
+            const kinds: Array<ProjectEntry["kind"] | undefined> = [];
+            for (let offset = 0; offset < children.length; offset += SYMLINK_RESOLVE_BATCH_SIZE) {
+              kinds.push(
+                ...(await Promise.all(
+                  children
+                    .slice(offset, offset + SYMLINK_RESOLVE_BATCH_SIZE)
+                    .map(async (child): Promise<ProjectEntry["kind"] | undefined> => {
+                      if (child.name === ".git") return undefined;
+                      if (child.isDirectory()) return "directory";
+                      if (child.isFile()) return "file";
+                      return child.isSymbolicLink() ? resolveSymlinkKind(child.name) : undefined;
+                    }),
+                )),
+              );
+            }
             return {
               entries: children.flatMap((child, index): ProjectEntry[] => {
                 const kind = kinds[index];
