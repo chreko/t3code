@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, afterEach, describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -190,6 +191,46 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(yield* paths("a")).toEqual(["a/file.txt", "a/to-b"]);
         // ...but once followed, the sibling's link back is hidden.
         expect(yield* paths("a/to-b")).toEqual(["a/to-b/file.txt"]);
+      }),
+    );
+
+    it.effect("resolves a folder of many symlinks in bounded batches", () =>
+      Effect.gen(function* () {
+        const platform = yield* HostProcess.Platform;
+        if (platform === "win32") return;
+        const cwd = yield* makeTempDir();
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        // Shaped like a pnpm `node_modules`: one link per package into `.pnpm`.
+        const packages = Array.from({ length: 200 }, (_, index) => `pkg-${index}`);
+        yield* Effect.forEach(
+          packages,
+          (name) =>
+            Effect.gen(function* () {
+              yield* writeTextFile(cwd, `node_modules/.pnpm/${name}/index.js`);
+              yield* fileSystem.symlink(`.pnpm/${name}`, path.join(cwd, "node_modules", name));
+            }),
+          { concurrency: 32, discard: true },
+        );
+        const realpath = NodeFSP.realpath;
+        let inFlight = 0;
+        let maxInFlight = 0;
+        vi.spyOn(NodeFSP, "realpath").mockImplementation((async (target: string) => {
+          maxInFlight = Math.max(maxInFlight, ++inFlight);
+          try {
+            return await realpath(target);
+          } finally {
+            inFlight--;
+          }
+        }) as typeof NodeFSP.realpath);
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const { entries } = yield* workspaceEntries.list({ cwd, directoryPath: "node_modules" });
+        expect(entries.map((entry) => entry.path).toSorted()).toEqual(
+          ["node_modules/.pnpm", ...packages.map((name) => `node_modules/${name}`)].toSorted(),
+        );
+        expect(entries.every((entry) => entry.kind === "directory")).toBe(true);
+        expect(maxInFlight).toBeLessThanOrEqual(64);
       }),
     );
 
