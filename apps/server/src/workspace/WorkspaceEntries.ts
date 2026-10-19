@@ -318,13 +318,43 @@ export const make = Effect.gen(function* () {
               throw new Error("Directory must be inside the workspace and outside .git.");
             }
             const children = await NodeFSP.readdir(directory, { withFileTypes: true });
+            // A symlink is listed as what it points to. One that dangles, or resolves outside
+            // the workspace or into `.git`, could not be opened, so it stays hidden.
+            const resolveSymlinkKind = async (
+              name: string,
+            ): Promise<ProjectEntry["kind"] | undefined> => {
+              const resolved = await NodeFSP.realpath(path.join(directory, name)).catch(
+                () => undefined,
+              );
+              if (resolved === undefined) return undefined;
+              const resolvedRelative = path.relative(root, resolved);
+              if (
+                resolvedRelative === ".." ||
+                resolvedRelative.startsWith(`..${path.sep}`) ||
+                path.isAbsolute(resolvedRelative) ||
+                resolvedRelative.split(path.sep).includes(".git")
+              ) {
+                return undefined;
+              }
+              const stat = await NodeFSP.stat(resolved).catch(() => undefined);
+              return stat?.isDirectory() ? "directory" : stat?.isFile() ? "file" : undefined;
+            };
+            const kinds = await Promise.all(
+              children.map(async (child): Promise<ProjectEntry["kind"] | undefined> => {
+                if (child.name === ".git") return undefined;
+                if (child.isDirectory()) return "directory";
+                if (child.isFile()) return "file";
+                return child.isSymbolicLink() ? resolveSymlinkKind(child.name) : undefined;
+              }),
+            );
             return {
-              entries: children.flatMap((child): ProjectEntry[] => {
-                if (child.name === ".git" || (!child.isDirectory() && !child.isFile())) return [];
+              entries: children.flatMap((child, index): ProjectEntry[] => {
+                const kind = kinds[index];
+                if (kind === undefined) return [];
                 return [
                   {
                     path: target.relativePath ? `${target.relativePath}/${child.name}` : child.name,
-                    kind: child.isDirectory() ? "directory" : "file",
+                    kind,
                   },
                 ];
               }),
