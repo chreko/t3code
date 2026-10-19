@@ -132,6 +132,38 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
       }),
     );
 
+    it.effect("lists symlinks as what they point to, hiding ones that cannot be opened", () =>
+      Effect.gen(function* () {
+        const platform = yield* HostProcess.Platform;
+        if (platform === "win32") return;
+        const cwd = yield* makeTempDir({ git: true });
+        const outside = yield* makeTempDir();
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeTextFile(cwd, "real.txt");
+        yield* writeTextFile(cwd, "realdir/nested.txt");
+        yield* writeTextFile(outside, "outside.txt");
+        yield* fileSystem.symlink("real.txt", path.join(cwd, "link.txt"));
+        yield* fileSystem.symlink("realdir", path.join(cwd, "linkdir"));
+        yield* fileSystem.symlink(outside, path.join(cwd, "outside-link"));
+        yield* fileSystem.symlink(".git", path.join(cwd, "git-link"));
+        yield* fileSystem.symlink("missing", path.join(cwd, "dangling"));
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const root = yield* workspaceEntries.list({ cwd, directoryPath: "" });
+        expect(root.entries.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
+          { path: "link.txt", kind: "file" },
+          { path: "linkdir", kind: "directory" },
+          { path: "real.txt", kind: "file" },
+          { path: "realdir", kind: "directory" },
+        ]);
+        expect(yield* workspaceEntries.list({ cwd, directoryPath: "linkdir" })).toEqual({
+          entries: [{ path: "linkdir/nested.txt", kind: "file" }],
+          truncated: false,
+        });
+      }),
+    );
+
     it.effect("labels the children of wide folders exactly as git does for each child", () =>
       Effect.gen(function* () {
         // Above 1,000 children, listing first asks whether the whole folder is ignored.
