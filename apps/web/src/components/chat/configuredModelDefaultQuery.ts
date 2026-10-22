@@ -28,12 +28,11 @@ const EMPTY_QUERY_ATOM = Atom.make(
   AsyncResult.initial<ProjectConfiguredModelDefaultsResult, never>(false),
 ).pipe(Atom.withLabel("configured-model-defaults:empty"));
 
-export function useConfiguredModelDefault(input: {
+/** The raw values the workspace's provider configs pin, or `null` until they load. */
+export function useConfiguredModelDefaults(input: {
   readonly environmentId: EnvironmentId;
   readonly cwd: string | null;
-  readonly provider: ProviderDriverKind;
-  readonly models: ReadonlyArray<ServerProvider["models"][number]>;
-}): ConfiguredModelDefault | null {
+}): ProjectConfiguredModelDefaultsResult | null {
   const queryAtom = useMemo(
     () =>
       input.cwd
@@ -45,25 +44,31 @@ export function useConfiguredModelDefault(input: {
     [input.environmentId, input.cwd],
   );
   const result = useAtomValue(queryAtom);
-  const data = AsyncResult.isSuccess(result) ? result.value : null;
+  return AsyncResult.isSuccess(result) ? result.value : null;
+}
 
-  return useMemo(() => {
-    if (!data) return null;
-    if (input.provider === "claude") {
-      return data.claude
-        ? resolveClaudeConfiguredValues(
-            data.claude,
-            input.models.map((model) => model.slug),
-          )
-        : null;
-    }
-    if (input.provider === "opencode") {
-      // OpenCode slugs models `providerID/modelID`, the same shape its config
-      // uses, so a configured model the snapshot does not list is ignored.
-      return data.opencode && input.models.some((model) => model.slug === data.opencode?.model)
-        ? { slug: data.opencode.model, options: [] }
-        : null;
-    }
-    return null;
-  }, [data, input.models, input.provider]);
+/** The configured default for one provider, resolved against the models it lists. */
+export function resolveConfiguredModelDefault(input: {
+  readonly data: ProjectConfiguredModelDefaultsResult | null;
+  readonly provider: ProviderDriverKind;
+  readonly models: ReadonlyArray<ServerProvider["models"][number]>;
+}): ConfiguredModelDefault | null {
+  const { data } = input;
+  if (!data) return null;
+  if (input.provider === "claudeAgent") {
+    return data.claude
+      ? resolveClaudeConfiguredValues(
+          data.claude,
+          input.models.map((model) => model.slug),
+        )
+      : null;
+  }
+  if (input.provider === "opencode") {
+    // OpenCode slugs models `providerID/modelID`, the same shape its config
+    // uses, so a configured model the snapshot does not list is ignored.
+    return data.opencode && input.models.some((model) => model.slug === data.opencode?.model)
+      ? { slug: data.opencode.model, options: [] }
+      : null;
+  }
+  return null;
 }

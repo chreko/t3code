@@ -2,6 +2,7 @@ import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { describe, expect, it } from "vite-plus/test";
 
+import { resolveConfiguredModelDefault } from "./components/chat/configuredModelDefaultQuery";
 import { deriveEffectiveComposerModelState } from "./composerDraftStore";
 
 const INSTANCE = ProviderInstanceId.make("claudeAgent");
@@ -79,5 +80,17 @@ describe("composer model seeding from provider configuration", () => {
       { id: "effort", value: "high" },
       { id: "contextWindow", value: "1m" },
     ]);
+  });
+});
+
+describe("resolveConfiguredModelDefault", () => {
+  it("resolves Claude's pinned model for the Claude driver", () => {
+    expect(
+      resolveConfiguredModelDefault({
+        data: { claude: { model: "claude-opus-5", effort: null }, opencode: null },
+        provider: ProviderDriverKind.make("claudeAgent"),
+        models: PROVIDERS[0]!.models,
+      })?.slug,
+    ).toBe("claude-opus-5");
   });
 });
