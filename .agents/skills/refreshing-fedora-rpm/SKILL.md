@@ -61,13 +61,28 @@ that way, and taking upstream's side is the right resolution when it happens.
   automerges _around_ the conflict, and taking the file wholesale silently drops it.
 - `apps/server/src/server.ts`: upstream imports the Sqlite layer as a namespace
   (`SqlitePersistence`), so the lock call is `SqlitePersistence.acquireServerStateLock`.
+- `apps/web/src/terminal/ghostty/surface.test.ts`: leave out upstream's "pastes the
+  terminal selection, and only that, on a Linux middle click" test. The fork removed
+  upstream's middle-click paste (d1eeb1624) for its own primary-selection paste
+  (`shouldPastePrimarySelection`); the two cannot coexist. Keep upstream's other tests.
 - `scripts/build-desktop-artifact.ts`: upstream's `homepage`/`maintainer` win.
 - A test file upstream deleted wins the modify/delete if our change was only harness
   wiring; check the wiring still exists in the real code.
 
-Two failure modes need `tsc` to show up, never conflict markers: automerge duplicating
-a key outside the conflict region, and new upstream test stubs of `ElectronShell`
-missing the fork's `readClipboardText` (add `readClipboardText: Effect.succeed("")`).
+Some failure modes show up only in `tsc` or the tests, never as conflict markers:
+
+- automerge duplicating a key outside the conflict region;
+- new upstream test stubs of `ElectronShell` missing the fork's `readClipboardText`
+  (add `readClipboardText: Effect.succeed("")`);
+- an upstream Effect bump moving modules out of `effect/unstable/*` (`effect/sql`,
+  `effect/reactivity`): `git grep effect/unstable/` finds fork files left behind. One
+  stale import in the server turns into hundreds of `unknown`-requirement errors;
+- upstream renaming or reshaping what fork code calls. The `projects.configuredModelDefaults`
+  handler in `ws.ts` reads the Claude home from the `claudeAgent` provider instance and
+  needs an entry in `observability/RpcInstrumentation.ts`;
+- a changed meaning with unchanged types: `resolveClaudeHomePath` once returned `$HOME`
+  for an empty home and now returns `~/.claude`. `ConfiguredModelDefaultsLoader.test.ts`
+  pins the default-home path, so run it.
 
 ## 2. Verify, then commit
 
@@ -78,14 +93,16 @@ export PATH=$HOME/.nvm/versions/node/v24.13.1/bin:$PWD/node_modules/.bin:$PATH
 CI=true vp i                # CI=true lets pnpm purge node_modules without a TTY
 for d in apps/web packages/contracts apps/server apps/desktop; do
   echo "== $d: $(cd $d && tsc --noEmit 2>&1 | grep -c 'error TS') errors"; done
-(cd apps/server && vp test run src/persistence/Layers/Sqlite.test.ts src/orchestration-v2/runtimeLayer.test.ts)
-(cd apps/web && vp test run --project unit src/components/chat/ src/composer-logic.test.ts src/composerConfiguredModelSeed.test.ts)
+(cd apps/server && vp test run src/persistence/Sqlite.test.ts src/orchestration-v2/runtimeLayer.test.ts \
+  src/provider/ConfiguredModelDefaultsLoader.test.ts)
+(cd apps/web && vp test run --project unit src/components/chat/ src/composer-logic.test.ts src/composerConfiguredModelSeed.test.ts \
+  src/terminal/ghostty/surface.test.ts)
 ```
 
 Pass = all four counts are 0 and both test runs are green. The server run carries the
-fork's own lock test ("lets only one server at a time hold a state directory"); upstream
-deleted `src/server.test.ts` with the new orchestrator (#2829). The web run carries the
-Alt+Enter and configured-model tests. `tsc` also prints many
+fork's own lock test ("lets only one server at a time hold a state directory") and the
+configured-model loader. The web run carries the Alt+Enter, configured-model, and
+middle-click paste tests. `tsc` also prints many
 `suggestion TS3771xx` lines from the Effect language service; those are not errors. No
 repo-wide checks (`vp check`, `vp run -r ...`). Commit as
 `merge: origin/main into the Fedora build`, noting any conflict you resolved.
