@@ -6,11 +6,12 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 # Refreshing the Fedora RPM
 
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
-hard-disabled, a server state lock (`acquireServerStateLock`), the configured-model
-default, terminal middle-click and host-clipboard paste, and a 30 s remote auth
-timeout. Two former patches are retired because upstream now does the same thing:
-packaging `homepage`/`maintainer` (c13f7d93ff) and Alt+Enter as a newline (the
-keybindings resolver in `composer-logic.ts` returns null on `event.altKey`). The rpm is the Electron desktop app, built by electron-builder **on
+hard-disabled, the configured-model default, terminal middle-click and host-clipboard
+paste, and a 30 s remote auth timeout. Three former patches are retired because upstream
+now does the same thing: packaging `homepage`/`maintainer` (c13f7d93ff), Alt+Enter as a
+newline (the keybindings resolver in `composer-logic.ts` returns null on `event.altKey`),
+and the server state lock (`acquireServerStateLock`), replaced by upstream's
+`acquireServerOwnership` in `serverOwnership.ts` (#16102). The rpm is the Electron desktop app, built by electron-builder **on
 eschdorf-ai** and fetched back to `dist/`. Nothing builds in this qube: no Rust, no
 libsecret headers, 8 GB RAM.
 
@@ -57,14 +58,21 @@ that way, and taking upstream's side is the right resolution when it happens.
 
 - `apps/*/src/cloud/publicConfig.ts`, `DesktopClerk.ts`: keep the hard-disabled constants.
 - `ChatComposer.tsx`: resolve hunk by hunk, never `git checkout --theirs` on the whole
-  file. The configured-model-default wiring (`useConfiguredModelDefault`) usually
-  automerges _around_ the conflict, and taking the file wholesale silently drops it.
-- `apps/server/src/server.ts`: upstream imports the Sqlite layer as a namespace
-  (`SqlitePersistence`), so the lock call is `SqlitePersistence.acquireServerStateLock`.
-- `apps/web/src/terminal/ghostty/surface.test.ts`: leave out upstream's "pastes the
-  terminal selection, and only that, on a Linux middle click" test. The fork removed
-  upstream's middle-click paste (d1eeb1624) for its own primary-selection paste
-  (`shouldPastePrimarySelection`); the two cannot coexist. Keep upstream's other tests.
+  file. The configured model default reaches model selection through
+  `useComposerProviderModel` (its `environmentId`/`cwd` inputs, then
+  `useConfiguredModelDefaults` and `resolveConfiguredModelDefault`); dropping it compiles
+  fine and silently loses the feature.
+- Contracts and RPC tables (`rpc.ts`, `project.ts`, `projectCommands.ts`,
+  `RpcAuthorization.ts`, `RpcInstrumentation.ts`, `ws.ts`): upstream adding a project RPC
+  next to `projects.configuredModelDefaults` conflicts; keep both. Where the conflict ends
+  inside a shared closing `})`, the fork side needs its own.
+- `apps/web/src/terminal/ghostty/surface.ts` and its test: the fork removed upstream's
+  middle-click paste (d1eeb1624: `isMiddleClickPastePlatform`, `pasteTerminalSelection`,
+  and the "pastes the terminal selection, and only that, on a Linux middle click" test)
+  for its own primary-selection paste (`shouldPastePrimarySelection`); the two cannot
+  coexist. The paste shortcut keeps the host read (`options.readClipboardText`) on top of
+  whatever upstream does there. The fork's only tests in that file are the
+  `shouldPastePrimarySelection` block; upstream deleting its own tests (#22557) wins.
 - `scripts/build-desktop-artifact.ts`: upstream's `homepage`/`maintainer` win.
 - A test file upstream deleted wins the modify/delete if our change was only harness
   wiring; check the wiring still exists in the real code.
@@ -73,7 +81,8 @@ Some failure modes show up only in `tsc` or the tests, never as conflict markers
 
 - automerge duplicating a key outside the conflict region;
 - new upstream test stubs of `ElectronShell` missing the fork's `readClipboardText`
-  (add `readClipboardText: Effect.succeed("")`);
+  (add `readClipboardText: Effect.succeed("")`), and new upstream test layers missing
+  `ConfiguredModelDefaultsLoader` (add `Layer.mock(...ConfiguredModelDefaultsLoader)({})`);
 - an upstream Effect bump moving modules out of `effect/unstable/*` (`effect/sql`,
   `effect/reactivity`): `git grep effect/unstable/` finds fork files left behind. One
   stale import in the server turns into hundreds of `unknown`-requirement errors;
@@ -93,16 +102,18 @@ export PATH=$HOME/.nvm/versions/node/v24.13.1/bin:$PWD/node_modules/.bin:$PATH
 CI=true vp i                # CI=true lets pnpm purge node_modules without a TTY
 for d in apps/web packages/contracts apps/server apps/desktop; do
   echo "== $d: $(cd $d && tsc --noEmit 2>&1 | grep -c 'error TS') errors"; done
-(cd apps/server && vp test run src/persistence/Sqlite.test.ts src/orchestration-v2/runtimeLayer.test.ts \
-  src/provider/ConfiguredModelDefaultsLoader.test.ts)
+(cd apps/server && vp test run src/orchestration-v2/runtimeLayer.test.ts \
+  src/provider/ConfiguredModelDefaultsLoader.test.ts src/ws.test.ts)
 (cd apps/web && vp test run --project unit src/components/chat/ src/composer-logic.test.ts src/composerConfiguredModelSeed.test.ts \
   src/terminal/ghostty/surface.test.ts)
 ```
 
 Pass = all four counts are 0 and both test runs are green. The server run carries the
-fork's own lock test ("lets only one server at a time hold a state directory") and the
-configured-model loader. The web run carries the Alt+Enter, configured-model, and
-middle-click paste tests. `tsc` also prints many
+configured-model loader. The web run carries the Alt+Enter, configured-model (including
+the Claude resolver, whose driver kind is `claudeAgent`, not `claude`), and middle-click
+paste tests. Root `package.json` pins `engines.node` to an exact Node 26 release; nvm's
+24.13.1 still installs, typechecks and tests with only a warning, and nothing enforces
+the pin. `tsc` also prints many
 `suggestion TS3771xx` lines from the Effect language service; those are not errors. No
 repo-wide checks (`vp check`, `vp run -r ...`). Commit as
 `merge: origin/main into the Fedora build`, noting any conflict you resolved.
