@@ -58,10 +58,16 @@ const FileTreeRow = function FileTreeRow(props: {
       accessibilityState={{ selected: props.selected }}
       onPressIn={() => {
         if (node.kind === "file") {
-          props.onPreviewFile?.(node.path);
+          props.onPreviewFile?.(node.linkTarget ?? node.path);
         }
       }}
       onPress={() => {
+        // A link out of the workspace cannot be listed or read in place, so it
+        // opens its target as a host path.
+        if (node.linkTarget !== undefined) {
+          props.onPressFile(node.linkTarget);
+          return;
+        }
         if (node.kind === "directory") {
           props.onPressDirectory(node.path, !props.expanded);
           return;
@@ -74,7 +80,14 @@ const FileTreeRow = function FileTreeRow(props: {
       )}
       style={{ paddingLeft: 8 + depth * 18 }}
     >
-      {node.kind === "directory" ? (
+      {node.linkTarget !== undefined ? (
+        <SymbolView
+          name="arrow.up.right"
+          size={12}
+          tintColorClassName="accent-icon-muted"
+          type="monochrome"
+        />
+      ) : node.kind === "directory" ? (
         <SymbolView
           name={props.expanded ? "chevron.down" : "chevron.right"}
           size={12}

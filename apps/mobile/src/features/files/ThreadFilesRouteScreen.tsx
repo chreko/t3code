@@ -472,7 +472,7 @@ export function ThreadFilesTreeScreen(props: ThreadFilesRouteScreenProps) {
     const params = {
       environmentId: String(environmentId),
       ...(threadId === null ? { cwd, projectName } : { threadId: String(threadId) }),
-      path: path.split("/").filter((segment) => segment.length > 0),
+      path: fileRoutePathSegments(path),
     };
     if (threadId === null) {
       navigation.navigate("NewTaskFile", params);

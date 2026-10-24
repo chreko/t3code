@@ -155,6 +155,11 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(root.entries.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
           { path: "link.txt", kind: "file" },
           { path: "linkdir", kind: "directory" },
+          {
+            path: "outside-link",
+            kind: "directory",
+            linkTarget: yield* fileSystem.realPath(outside),
+          },
           { path: "real.txt", kind: "file" },
           { path: "realdir", kind: "directory" },
         ]);
@@ -162,6 +167,40 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
           entries: [{ path: "linkdir/nested.txt", kind: "file" }],
           truncated: false,
         });
+      }),
+    );
+
+    it.effect("lists a link that leaves the workspace with the real path it opens", () =>
+      // Reads refuse workspace-relative paths outside the root, so clients open such a
+      // link by its target, the way they open any host path.
+      Effect.gen(function* () {
+        const platform = yield* HostProcess.Platform;
+        if (platform === "win32") return;
+        const cwd = yield* makeTempDir();
+        const outside = yield* makeTempDir();
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeTextFile(outside, "shared/notes.md");
+        yield* writeTextFile(cwd, "docs/readme.md");
+        yield* fileSystem.symlink(path.join(outside, "shared"), path.join(cwd, "docs/shared"));
+        yield* fileSystem.symlink(
+          path.join(outside, "shared/notes.md"),
+          path.join(cwd, "docs/notes.md"),
+        );
+        yield* fileSystem.symlink(path.join(outside, "missing"), path.join(cwd, "docs/gone"));
+        const realOutside = yield* fileSystem.realPath(outside);
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const { entries } = yield* workspaceEntries.list({ cwd, directoryPath: "docs" });
+        expect(entries.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
+          {
+            path: "docs/notes.md",
+            kind: "file",
+            linkTarget: path.join(realOutside, "shared/notes.md"),
+          },
+          { path: "docs/readme.md", kind: "file" },
+          { path: "docs/shared", kind: "directory", linkTarget: path.join(realOutside, "shared") },
+        ]);
       }),
     );
 

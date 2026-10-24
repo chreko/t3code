@@ -8,7 +8,9 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
 hard-disabled, the configured-model default, terminal middle-click and host-clipboard
 paste, a 30 s remote auth timeout, and two cherry-picked upstream PRs that show symlinks
-(#21920 in the Files tree, #8281 in the path picker; both open when picked, 2026-10-24). Three former patches are retired because upstream
+(#21920 in the Files tree, #8281 in the path picker; both open when picked, 2026-10-24).
+On top of #21920 the fork lists links that leave the project too, with a `linkTarget`
+that the web and mobile trees open as a host path. Three former patches are retired because upstream
 now does the same thing: packaging `homepage`/`maintainer` (c13f7d93ff), Alt+Enter as a
 newline (the keybindings resolver in `composer-logic.ts` returns null on `event.altKey`),
 and the server state lock (`acquireServerStateLock`), replaced by upstream's
@@ -80,6 +82,12 @@ that way, and taking upstream's side is the right resolution when it happens.
   won't see the cherry-picks as duplicates), take upstream's side of that function and
   its tests; then drop the PR from the opening paragraph. The picks added
   `import * as NodeFSP from "node:fs/promises"` to the test, which main had dropped.
+  Then re-apply the fork's outside-link commit to upstream's `resolveSymlinkKind`:
+  upstream hides links outside the root, the fork records them in `linkTargets`. Its
+  test `lists a link that leaves the workspace with the real path it opens` fails if
+  that was lost; the clients (`ProjectEntry.linkTarget` in contracts,
+  `FileBrowserPanel`, `FileBreadcrumbs`, mobile `fileTree`/`FileTreeBrowser`) conflict
+  only if upstream changed those files.
 - A test file upstream deleted wins the modify/delete if our change was only harness
   wiring; check the wiring still exists in the real code.
 

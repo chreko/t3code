@@ -250,6 +250,12 @@ export const ProjectEntry = Schema.Struct({
   path: TrimmedNonEmptyString,
   kind: ProjectEntryKind,
   ignored: Schema.optional(Schema.Boolean),
+  /**
+   * The real path of a symlink that leads outside the workspace. Reads refuse
+   * workspace-relative paths beyond the root, so clients open this host path
+   * instead of browsing the link in place.
+   */
+  linkTarget: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
 

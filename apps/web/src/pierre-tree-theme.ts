@@ -13,6 +13,7 @@ export const PIERRE_TREE_UNSAFE_CSS = `
   [data-truncate-marker] { display: none; }
   button[data-type='item'], button[data-type='item']::before { border-radius: var(--radius-md); }
   svg[data-icon-name='t3-tree-icon-loading'] { opacity: 0.6; }
+  svg[data-icon-name='t3-tree-icon-link'] { opacity: 0.6; }
   @media (prefers-reduced-motion: no-preference) {
     svg[data-icon-name='t3-tree-icon-loading'] { animation: t3-tree-spin 1s linear infinite; }
   }

@@ -1,7 +1,7 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { Spinner } from "~/components/ui/spinner";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { ArrowLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowLeftIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 
 import { PierreEntryIcon } from "~/components/chat/PierreEntryIcon";
@@ -173,6 +173,23 @@ function BreadcrumbMenuContent(props: {
                   </Tooltip>
                 </>
               );
+              const linkTarget = entry.linkTarget;
+              // A link out of the workspace cannot be listed or read in place, so it
+              // opens its target as a host path.
+              if (linkTarget !== undefined) {
+                return (
+                  <MenuItem
+                    key={entry.path}
+                    onClick={() => {
+                      props.onOpenChange(false);
+                      props.onOpenFile(linkTarget);
+                    }}
+                  >
+                    {row}
+                    <ExternalLinkIcon />
+                  </MenuItem>
+                );
+              }
               return entry.kind === "directory" ? (
                 <MenuItem
                   key={entry.path}

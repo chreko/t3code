@@ -129,13 +129,28 @@ function buildTreeEntries(
   const entryKinds: ReadonlyMap<string, ProjectEntry["kind"]> = new Map(
     entries.map((entry) => [entry.path, entry.kind] as const),
   );
+  const linkTargets: ReadonlyMap<string, string> = new Map(
+    entries.flatMap((entry) =>
+      entry.linkTarget === undefined ? [] : [[entry.path, entry.linkTarget] as const],
+    ),
+  );
   const treePaths = entries.map(treePath);
   const directories = entries.filter((entry) => entry.kind === "directory");
   const directoryPaths = directories.map(treePath);
   // Expanding a folder lists it, and an ignored one such as `node_modules` can hold tens of
-  // thousands, so expand all skips ignored folders. They still open by hand.
-  const expandableDirectoryPaths = directories.filter((entry) => !entry.ignored).map(treePath);
-  return { entries, entryKinds, treePaths, directoryPaths, expandableDirectoryPaths };
+  // thousands, so expand all skips ignored folders. They still open by hand. A folder link
+  // out of the workspace opens its target instead of expanding, so expand all skips it too.
+  const expandableDirectoryPaths = directories
+    .filter((entry) => !entry.ignored && entry.linkTarget === undefined)
+    .map(treePath);
+  return {
+    entries,
+    entryKinds,
+    linkTargets,
+    treePaths,
+    directoryPaths,
+    expandableDirectoryPaths,
+  };
 }
 
 export default function FileBrowserPanel({
@@ -169,9 +184,10 @@ export default function FileBrowserPanel({
     { environmentId, cwd: hostFolder ? null : cwd, query: query.slice(0, 256) },
     200,
   );
-  const { entries, entryKinds, treePaths, directoryPaths, expandableDirectoryPaths } =
+  const { entries, entryKinds, linkTargets, treePaths, directoryPaths, expandableDirectoryPaths } =
     buildTreeEntries(directoryEntries, pathSearch.entries, pathSearch.isPending, query);
   const entryKindsRef = useRef(entryKinds);
+  const linkTargetsRef = useRef(linkTargets);
   const previousTreePathsRef = useRef<readonly string[] | null>(null);
   const syncingSelectionRef = useRef(false);
   const treeSelectionPathRef = useRef<string | null>(null);
@@ -298,16 +314,18 @@ export default function FileBrowserPanel({
       const selectedPath = selectedPaths.at(-1)?.replace(/\/$/, "");
       if (selectedPath && entryKindsRef.current.get(selectedPath) === "file") {
         treeSelectionPathRef.current = selectedPath;
-        onOpenFile(panelPath(selectedPath));
+        onOpenFile(linkTargetsRef.current.get(selectedPath) ?? panelPath(selectedPath));
       }
     },
     paths: [],
-    renderRowDecoration: ({ item, row }) =>
-      row.kind === "directory" &&
-      row.isExpanded &&
-      loadingDirectoriesRef.current.has(item.path.replace(/\/$/, ""))
+    renderRowDecoration: ({ item, row }) => {
+      const path = item.path.replace(/\/$/, "");
+      const linkTarget = linkTargetsRef.current.get(path);
+      if (linkTarget !== undefined) return { icon: "t3-tree-icon-link", title: linkTarget };
+      return row.kind === "directory" && row.isExpanded && loadingDirectoriesRef.current.has(path)
         ? { icon: "t3-tree-icon-loading", title: "Loading…" }
-        : null,
+        : null;
+    },
     search: false,
     onSearchChange: (value) => setQuery(value ?? ""),
     unsafeCSS: PIERRE_TREE_UNSAFE_CSS,
@@ -336,6 +354,7 @@ export default function FileBrowserPanel({
     setQuery("");
     search.close();
   };
+  const openLinkTarget = useStableCallback(onOpenFile);
   const expandedPathsRef = useRef(new Set<string>());
   useEffect(() => {
     const currentPaths = new Set(directoryPaths);
@@ -347,6 +366,14 @@ export default function FileBrowserPanel({
       for (const path of directoryPaths) {
         const item = model.getItem(path);
         if (item?.isDirectory() && "isExpanded" in item && item.isExpanded()) {
+          // `list` refuses a folder outside the workspace, so a folder link opens its
+          // target as a host folder instead of expanding.
+          const linkTarget = linkTargetsRef.current.get(path.replace(/\/$/, ""));
+          if (linkTarget !== undefined) {
+            if ("collapse" in item && typeof item.collapse === "function") item.collapse();
+            openLinkTarget(linkTarget);
+            continue;
+          }
           if (!expandedPathsRef.current.has(path)) {
             expandedPathsRef.current.add(path);
             void load(path.replace(/\/$/, ""));
@@ -359,7 +386,7 @@ export default function FileBrowserPanel({
     };
     loadExpanded();
     return model.subscribe(loadExpanded);
-  }, [directoryPaths, load, model]);
+  }, [directoryPaths, load, model, openLinkTarget]);
   useEffect(() => {
     model.setGitStatus(
       entries
@@ -404,6 +431,7 @@ export default function FileBrowserPanel({
     if (!ready) return;
     if (previousTreePathsRef.current === treePaths) return;
     entryKindsRef.current = entryKinds;
+    linkTargetsRef.current = linkTargets;
     const previousTreePaths = previousTreePathsRef.current;
     previousTreePathsRef.current = treePaths;
     if (previousTreePaths === null) {
@@ -412,7 +440,7 @@ export default function FileBrowserPanel({
     }
     const updates = buildFileTreePathUpdates(previousTreePaths, treePaths);
     if (updates.length > 0) model.batch(updates);
-  }, [ready, entryKinds, model, treePaths]);
+  }, [ready, entryKinds, linkTargets, model, treePaths]);
 
   useEffect(() => {
     if (expandAll && !query.trim())

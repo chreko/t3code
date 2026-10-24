@@ -356,25 +356,31 @@ export const make = Effect.gen(function* () {
                     NodeFSP.realpath(path.join(normalizedCwd, ...segments.slice(0, index + 1))),
                   ),
               ).then((folders) => [root, ...folders]));
-            // A symlink is listed as what it points to. One that dangles, resolves outside the
-            // workspace or into `.git`, or leads back to a folder on this path could not be
-            // browsed sensibly, so it stays hidden.
+            // Reads refuse workspace-relative paths beyond the root, so a link that leaves
+            // the workspace carries its real path for clients to open as a host path.
+            const linkTargets = new Map<string, string>();
+            // A symlink is listed as what it points to. One that dangles, resolves into
+            // `.git`, or leads back to a folder on this path could not be browsed sensibly,
+            // so it stays hidden.
             const resolveSymlinkKind = async (
               name: string,
             ): Promise<ProjectEntry["kind"] | undefined> => {
               const resolved = await NodeFSP.realpath(path.join(directory, name)).catch(
                 () => undefined,
               );
-              if (
-                resolved === undefined ||
-                !isSameOrInside(root, resolved) ||
-                path.relative(root, resolved).split(path.sep).includes(".git")
-              ) {
+              if (resolved === undefined) return undefined;
+              const inside = isSameOrInside(root, resolved);
+              if (inside && path.relative(root, resolved).split(path.sep).includes(".git")) {
                 return undefined;
               }
               const stat = await NodeFSP.stat(resolved).catch(() => undefined);
-              if (stat?.isFile()) return "file";
-              if (!stat?.isDirectory()) return undefined;
+              const kind = stat?.isFile() ? "file" : stat?.isDirectory() ? "directory" : undefined;
+              if (!inside) {
+                if (kind !== undefined) linkTargets.set(name, resolved);
+                return kind;
+              }
+              if (kind === "file") return "file";
+              if (kind === undefined) return undefined;
               const folders = await loadVisitedFolders();
               return folders.some((folder) => isSameOrInside(resolved, folder))
                 ? undefined
@@ -401,10 +407,12 @@ export const make = Effect.gen(function* () {
               entries: children.flatMap((child, index): ProjectEntry[] => {
                 const kind = kinds[index];
                 if (kind === undefined) return [];
+                const linkTarget = linkTargets.get(child.name);
                 return [
                   {
                     path: target.relativePath ? `${target.relativePath}/${child.name}` : child.name,
                     kind,
+                    ...(linkTarget === undefined ? {} : { linkTarget }),
                   },
                 ];
               }),
