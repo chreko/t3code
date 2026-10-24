@@ -7,7 +7,8 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
 hard-disabled, the configured-model default, terminal middle-click and host-clipboard
-paste, and a 30 s remote auth timeout. Three former patches are retired because upstream
+paste, a 30 s remote auth timeout, and two cherry-picked upstream PRs that show symlinks
+(#21920 in the Files tree, #8281 in the path picker; both open when picked, 2026-10-24). Three former patches are retired because upstream
 now does the same thing: packaging `homepage`/`maintainer` (c13f7d93ff), Alt+Enter as a
 newline (the keybindings resolver in `composer-logic.ts` returns null on `event.altKey`),
 and the server state lock (`acquireServerStateLock`), replaced by upstream's
@@ -74,6 +75,11 @@ that way, and taking upstream's side is the right resolution when it happens.
   whatever upstream does there. The fork's only tests in that file are the
   `shouldPastePrimarySelection` block; upstream deleting its own tests (#22557) wins.
 - `scripts/build-desktop-artifact.ts`: upstream's `homepage`/`maintainer` win.
+- `apps/server/src/workspace/WorkspaceEntries.ts` and its test: the symlink commits are
+  upstream's own PRs, so once #21920 or #8281 lands on main (likely squashed, so git
+  won't see the cherry-picks as duplicates), take upstream's side of that function and
+  its tests; then drop the PR from the opening paragraph. The picks added
+  `import * as NodeFSP from "node:fs/promises"` to the test, which main had dropped.
 - A test file upstream deleted wins the modify/delete if our change was only harness
   wiring; check the wiring still exists in the real code.
 
