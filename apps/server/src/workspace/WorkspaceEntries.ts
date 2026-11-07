@@ -64,6 +64,10 @@ export class WorkspaceEntriesReadDirectoryError extends Schema.TaggedError<Works
     cause: Schema.Defect(),
   },
 ) {
+  get pathMissing(): boolean {
+    return (this.cause as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+  }
+
   override get message(): string {
     const cwd = this.cwd ? ` from '${this.cwd}'` : "";
     return `Failed to read workspace directory '${this.parentPath}' while browsing '${this.partialPath}'${cwd}.`;
@@ -320,7 +324,7 @@ export const make = Effect.gen(function* () {
                   relativePath: directoryPath,
                 })
                 .pipe(Effect.mapError(toError));
-        const { entries, throughSymlink } = yield* Effect.tryPromise({
+        const { entries, throughSymlink, nestedGitRoots } = yield* Effect.tryPromise({
           try: async () => {
             const root = await NodeFSP.realpath(normalizedCwd);
             const directory = await NodeFSP.realpath(target.absolutePath);
@@ -343,25 +347,21 @@ export const make = Effect.gen(function* () {
                 !path.isAbsolute(relativeChild)
               );
             };
-            // The real folders the requested path passes through, root first. A folder link
-            // back to any of them would nest the same entries under ever-longer paths, which
-            // "Expand all folders" would follow without end.
+            // Reject canonical ancestors so "Expand all folders" cannot follow a cycle.
             let visitedFolders: Promise<ReadonlyArray<string>> | undefined;
             const loadVisitedFolders = () =>
-              (visitedFolders ??= Promise.all(
-                target.relativePath
-                  .split("/")
-                  .filter((segment) => segment !== "")
-                  .map((_, index, segments) =>
-                    NodeFSP.realpath(path.join(normalizedCwd, ...segments.slice(0, index + 1))),
-                  ),
-              ).then((folders) => [root, ...folders]));
-            // Reads refuse workspace-relative paths beyond the root, so a link that leaves
-            // the workspace carries its real path for clients to open as a host path.
+              (visitedFolders ??= (async () => {
+                const folders = [root];
+                let current = normalizedCwd;
+                for (const segment of target.relativePath.split("/").filter(Boolean)) {
+                  current = path.join(current, segment);
+                  folders.push(await NodeFSP.realpath(current));
+                }
+                return folders;
+              })());
+            // Reads refuse workspace-relative paths beyond the root, so a link that leaves the
+            // workspace carries its real path for clients to open as a host path.
             const linkTargets = new Map<string, string>();
-            // A symlink is listed as what it points to. One that dangles, resolves into
-            // `.git`, or leads back to a folder on this path could not be browsed sensibly,
-            // so it stays hidden.
             const resolveSymlinkKind = async (
               name: string,
             ): Promise<ProjectEntry["kind"] | undefined> => {
@@ -386,8 +386,7 @@ export const make = Effect.gen(function* () {
                 ? undefined
                 : "directory";
             };
-            // A pnpm `node_modules` holds a link per package. Resolving them in batches keeps
-            // a large folder from queueing thousands of calls ahead of other filesystem work.
+            // Bound filesystem work for directories such as pnpm node_modules.
             const kinds: Array<ProjectEntry["kind"] | undefined> = [];
             for (let offset = 0; offset < children.length; offset += SYMLINK_RESOLVE_BATCH_SIZE) {
               kinds.push(
@@ -403,7 +402,17 @@ export const make = Effect.gen(function* () {
                 )),
               );
             }
+            const nestedGitRoots: Array<string> = [];
+            const segments = target.relativePath.split("/").filter(Boolean);
+            for (let index = 1; index <= segments.length; index += 1) {
+              const candidate = segments.slice(0, index).join("/");
+              const dotGit = await NodeFSP.lstat(path.join(normalizedCwd, candidate, ".git")).catch(
+                () => null,
+              );
+              if (dotGit) nestedGitRoots.push(candidate);
+            }
             return {
+              nestedGitRoots,
               entries: children.flatMap((child, index): ProjectEntry[] => {
                 const kind = kinds[index];
                 if (kind === undefined) return [];
@@ -422,6 +431,8 @@ export const make = Effect.gen(function* () {
           },
           catch: toError,
         });
+        let gitRoot = "";
+        let gitPrefix = "";
         // stdin avoids argument limits; ignore classification is optional without git/repositories.
         const checkIgnore = (paths: ReadonlyArray<string>) =>
           vcsProcess
@@ -429,20 +440,27 @@ export const make = Effect.gen(function* () {
               operation: "WorkspaceEntries.list",
               command: "git",
               args: ["-c", "core.fsmonitor=false", "check-ignore", "-z", "--stdin"],
-              cwd: normalizedCwd,
-              stdin: `${paths.join("\0")}\0`,
+              cwd: path.join(normalizedCwd, gitRoot),
+              stdin: `${paths.map((entryPath) => entryPath.slice(gitPrefix.length)).join("\0")}\0`,
               allowNonZeroExit: true,
               timeoutMs: 10_000,
               maxOutputBytes: 16 * 1024 * 1024,
             })
             .pipe(Effect.orElseSucceed(() => undefined));
+        // Git refuses paths inside a submodule (128) but still answers for nested clones.
+        for (const nestedGitRoot of nestedGitRoots) {
+          if ((yield* checkIgnore([`${nestedGitRoot}/.git`]))?.exitCode !== 128) continue;
+          gitRoot = nestedGitRoot;
+          gitPrefix = `${gitRoot}/`;
+        }
+        const directoryGitPath = target.relativePath.slice(gitPrefix.length);
         // Check ignored folders once to avoid child index lookups; exit 0 guarantees no tracked descendants.
         // Symlinks and pathspec magic still need per-child checks.
         if (
           entries.length > IGNORE_CHECK_CHUNK_SIZE &&
-          target.relativePath !== "" &&
+          directoryGitPath !== "" &&
           !throughSymlink &&
-          !/^:|[*?[\\]/.test(target.relativePath) &&
+          !/^:|[*?[\\]/.test(directoryGitPath) &&
           (yield* checkIgnore([target.relativePath]))?.exitCode === 0
         ) {
           return {
@@ -456,7 +474,7 @@ export const make = Effect.gen(function* () {
             entries.slice(offset, offset + IGNORE_CHECK_CHUNK_SIZE).map((entry) => entry.path),
           );
           if (!result || (result.exitCode !== 0 && result.exitCode !== 1)) break;
-          for (const ignoredPath of result.stdout.split("\0")) ignored.add(ignoredPath);
+          for (const ignoredPath of result.stdout.split("\0")) ignored.add(gitPrefix + ignoredPath);
         }
         return {
           entries: entries.map((entry) =>

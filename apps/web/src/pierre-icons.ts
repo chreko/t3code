@@ -6,6 +6,8 @@ import {
 import { VIDEO_FILE_EXTENSIONS } from "@t3tools/shared/video";
 import { fileIconPathForMimeType } from "@t3tools/shared/mediaPreview";
 
+import type { ContextChipAccentKind } from "~/lib/contextChipAccents";
+
 export interface PierreIconResolution {
   name: string;
   token?: string;
@@ -55,7 +57,7 @@ const T3_FILE_ICON_SPRITE = `
   </symbol>
   <!-- Lucide File Type, File Text, File Spreadsheet, Presentation and Book Open icons, ISC license. -->
   <symbol id="t3-file-icon-pdf" viewBox="0 0 24 24">
-    <g fill="none" style="stroke: ${DOCUMENT_ICON_COLORS["t3-file-icon-pdf"]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" style="stroke: var(--document-icon-stroke, ${DOCUMENT_ICON_COLORS["t3-file-icon-pdf"]})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
       <path d="M14 2v5a1 1 0 0 0 1 1h5" />
       <path d="M11 18h2" />
@@ -64,7 +66,7 @@ const T3_FILE_ICON_SPRITE = `
     </g>
   </symbol>
   <symbol id="t3-file-icon-word" viewBox="0 0 24 24">
-    <g fill="none" style="stroke: ${DOCUMENT_ICON_COLORS["t3-file-icon-word"]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" style="stroke: var(--document-icon-stroke, ${DOCUMENT_ICON_COLORS["t3-file-icon-word"]})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
       <path d="M14 2v5a1 1 0 0 0 1 1h5" />
       <path d="M10 9H8" />
@@ -73,7 +75,7 @@ const T3_FILE_ICON_SPRITE = `
     </g>
   </symbol>
   <symbol id="t3-file-icon-spreadsheet" viewBox="0 0 24 24">
-    <g fill="none" style="stroke: ${DOCUMENT_ICON_COLORS["t3-file-icon-spreadsheet"]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" style="stroke: var(--document-icon-stroke, ${DOCUMENT_ICON_COLORS["t3-file-icon-spreadsheet"]})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
       <path d="M14 2v5a1 1 0 0 0 1 1h5" />
       <path d="M8 13h2" />
@@ -83,14 +85,14 @@ const T3_FILE_ICON_SPRITE = `
     </g>
   </symbol>
   <symbol id="t3-file-icon-slides" viewBox="0 0 24 24">
-    <g fill="none" style="stroke: ${DOCUMENT_ICON_COLORS["t3-file-icon-slides"]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" style="stroke: var(--document-icon-stroke, ${DOCUMENT_ICON_COLORS["t3-file-icon-slides"]})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M2 3h20" />
       <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
       <path d="m7 21 5-5 5 5" />
     </g>
   </symbol>
   <symbol id="t3-file-icon-epub" viewBox="0 0 24 24">
-    <g fill="none" style="stroke: ${DOCUMENT_ICON_COLORS["t3-file-icon-epub"]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" style="stroke: var(--document-icon-stroke, ${DOCUMENT_ICON_COLORS["t3-file-icon-epub"]})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 7v14" />
       <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
     </g>
@@ -178,6 +180,7 @@ export const T3_PIERRE_ICONS = {
     kt: "t3-file-icon-kotlin",
     kts: "t3-file-icon-kotlin",
     lua: "t3-file-icon-lua",
+    luau: "t3-file-icon-lua",
     php: "t3-file-icon-php",
     ps1: "t3-file-icon-powershell",
     psm1: "t3-file-icon-powershell",
@@ -186,6 +189,9 @@ export const T3_PIERRE_ICONS = {
     scala: "t3-file-icon-scala",
     toml: "t3-file-icon-toml",
     xml: "t3-file-icon-xml",
+    xsd: "t3-file-icon-xml",
+    xsl: "t3-file-icon-xml",
+    xslt: "t3-file-icon-xml",
   },
 } satisfies FileTreeIcons;
 
@@ -248,9 +254,17 @@ export function resolvePierreIconForEntry(
     : icon;
 }
 
-export function documentIconColorForFileName(fileName: string) {
+const DOCUMENT_CHIP_KINDS: Readonly<Record<string, ContextChipAccentKind>> = {
+  "t3-file-icon-pdf": "doc-pdf",
+  "t3-file-icon-word": "doc-word",
+  "t3-file-icon-spreadsheet": "doc-spreadsheet",
+  "t3-file-icon-slides": "doc-slides",
+  "t3-file-icon-epub": "doc-epub",
+};
+
+export function documentChipKindForFileName(fileName: string) {
   const icon = resolvePierreIconForEntry(fileName, "file");
-  return icon ? DOCUMENT_ICON_COLORS[icon.name] : undefined;
+  return icon ? DOCUMENT_CHIP_KINDS[icon.name] : undefined;
 }
 
 export function hasSpecificPierreIconForFileName(fileName: string): boolean {

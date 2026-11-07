@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFSP from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { FileFinder } from "@ff-labs/fff-node";
 import { it, afterEach, describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -107,6 +108,14 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         yield* writeTextFile(cwd, "node_modules/pkg/index.js");
         yield* writeTextFile(cwd, "src/index.ts");
         yield* fileSystem.makeDirectory(path.join(cwd, "empty"));
+        yield* git(cwd, ["init", "sub"]);
+        yield* writeTextFile(cwd, "sub/.gitignore", "dist/\n");
+        yield* writeTextFile(cwd, "sub/dist/out.js");
+        const gitlink = yield* git(cwd, ["hash-object", "tracked.txt"]);
+        yield* git(cwd, ["update-index", "--add", "--cacheinfo", `160000,${gitlink},sub`]);
+        // A nested clone that isn't a submodule keeps the outer repository's ignore rules.
+        yield* git(cwd, ["init", "node_modules/pkg"]);
+        yield* git(cwd, ["init", "sub/dist"]);
 
         const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
         const root = yield* workspaceEntries.list({ cwd, directoryPath: "" });
@@ -124,6 +133,17 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(root.truncated).toBe(false);
         expect(yield* workspaceEntries.list({ cwd, directoryPath: "node_modules/pkg" })).toEqual({
           entries: [{ path: "node_modules/pkg/index.js", kind: "file", ignored: true }],
+          truncated: false,
+        });
+        // Git refuses pathspecs inside a submodule from the outer repository.
+        expect((yield* workspaceEntries.list({ cwd, directoryPath: "sub" })).entries).toEqual(
+          expect.arrayContaining([
+            { path: "sub/.gitignore", kind: "file" },
+            { path: "sub/dist", kind: "directory", ignored: true },
+          ]),
+        );
+        expect(yield* workspaceEntries.list({ cwd, directoryPath: "sub/dist" })).toEqual({
+          entries: [{ path: "sub/dist/out.js", kind: "file", ignored: true }],
           truncated: false,
         });
         expect(yield* workspaceEntries.list({ cwd, directoryPath: "empty" })).toEqual({
@@ -241,13 +261,16 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         // Shaped like a pnpm `node_modules`: one link per package into `.pnpm`.
+        const directoryPath = [...Array.from({ length: 80 }, () => "nested"), "node_modules"].join(
+          "/",
+        );
         const packages = Array.from({ length: 200 }, (_, index) => `pkg-${index}`);
         yield* Effect.forEach(
           packages,
           (name) =>
             Effect.gen(function* () {
-              yield* writeTextFile(cwd, `node_modules/.pnpm/${name}/index.js`);
-              yield* fileSystem.symlink(`.pnpm/${name}`, path.join(cwd, "node_modules", name));
+              yield* writeTextFile(cwd, `${directoryPath}/.pnpm/${name}/index.js`);
+              yield* fileSystem.symlink(`.pnpm/${name}`, path.join(cwd, directoryPath, name));
             }),
           { concurrency: 32, discard: true },
         );
@@ -264,9 +287,12 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         }) as typeof NodeFSP.realpath);
 
         const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
-        const { entries } = yield* workspaceEntries.list({ cwd, directoryPath: "node_modules" });
+        const { entries } = yield* workspaceEntries.list({ cwd, directoryPath });
         expect(entries.map((entry) => entry.path).toSorted()).toEqual(
-          ["node_modules/.pnpm", ...packages.map((name) => `node_modules/${name}`)].toSorted(),
+          [
+            `${directoryPath}/.pnpm`,
+            ...packages.map((name) => `${directoryPath}/${name}`),
+          ].toSorted(),
         );
         expect(entries.every((entry) => entry.kind === "directory")).toBe(true);
         expect(maxInFlight).toBeLessThanOrEqual(64);
@@ -685,6 +711,32 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
       }),
     );
 
+    it.effect("searches an invalid regex literally without matching case", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-content-invalid-regex-" });
+        yield* writeTextFile(cwd, "src/calls.ts", "call(Foo(bar));\n");
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const result = yield* workspaceEntries.searchContents({
+          cwd,
+          query: "foo(",
+          limit: 100,
+          caseSensitive: false,
+          wholeWord: false,
+          useRegex: true,
+        });
+
+        expect(result.regexFallbackError).toBeDefined();
+        expect(result.matches).toEqual([
+          expect.objectContaining({
+            path: "src/calls.ts",
+            lineNumber: 1,
+            matchRanges: [{ start: 5, end: 9 }],
+          }),
+        ]);
+      }),
+    );
+
     it.effect("maps multi-byte lines to string-indexed ranges", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTempDir({ prefix: "t3code-workspace-content-multibyte-" });
@@ -704,6 +756,76 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         const match = result.matches[0]!;
         const range = match.matchRanges[0]!;
         expect(match.lineContent.slice(range.start, range.end)).toBe("wörld");
+      }),
+    );
+
+    it.effect("keeps matches past the truncated part of a long line", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-content-long-line-" });
+        yield* writeTextFile(cwd, "dist/app.min.js", `${"x".repeat(600)} needleSuffix\n`);
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const search = (wholeWord: boolean) =>
+          workspaceEntries.searchContents({
+            cwd,
+            query: "needle",
+            limit: 100,
+            caseSensitive: true,
+            wholeWord,
+            useRegex: false,
+          });
+
+        expect((yield* search(false)).matches).toEqual([
+          expect.objectContaining({ path: "dist/app.min.js", lineNumber: 1 }),
+        ]);
+        expect((yield* search(true)).matches).toEqual([]);
+      }),
+    );
+
+    it.effect("keeps answering from the live index when a refresh outlasts the scan wait", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-content-refresh-" });
+        yield* writeTextFile(cwd, "src/notes.ts", "const needle = 1;\n");
+        let scansOutlastWait = false;
+        let finders = 0;
+        let rescans = 0;
+        const createFinder = FileFinder.create.bind(FileFinder);
+        vi.spyOn(FileFinder, "create").mockImplementation((options) => {
+          const created = createFinder(options);
+          if (created.ok) {
+            const finder = created.value;
+            finders += 1;
+            const scanFiles = finder.scanFiles.bind(finder);
+            finder.scanFiles = () => {
+              rescans += 1;
+              return scanFiles();
+            };
+            const waitForIndexReady = finder.waitForIndexReady.bind(finder);
+            finder.waitForIndexReady = (timeoutMs) =>
+              scansOutlastWait
+                ? Promise.resolve({ ok: true, value: false })
+                : waitForIndexReady(timeoutMs);
+          }
+          return created;
+        });
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const searchNeedle = workspaceEntries.searchContents({
+          cwd,
+          query: "needle",
+          limit: 100,
+          caseSensitive: true,
+          wholeWord: false,
+          useRegex: false,
+        });
+        yield* searchNeedle;
+
+        scansOutlastWait = true;
+        yield* workspaceEntries.refresh(cwd);
+        const result = yield* searchNeedle;
+
+        expect(result.matches.map((match) => match.path)).toEqual(["src/notes.ts"]);
+        // The second search ran on the rescanned live finder, not a rebuild.
+        expect({ finders, rescans }).toEqual({ finders: 1, rescans: 1 });
       }),
     );
   });
@@ -758,6 +880,31 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(hiddenPrefixResult).toEqual({
           parentPath: cwd,
           entries: [{ name: ".config", fullPath: path.join(cwd, ".config") }],
+        });
+      }),
+    );
+
+    it.effect("marks only a missing directory as missing when browsing fails", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const path = yield* Path.Path;
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-browse-missing-" });
+        yield* writeTextFile(cwd, "file.txt", "");
+
+        const missing = yield* workspaceEntries
+          .browse({ partialPath: `${path.join(cwd, "absent", "nested")}${path.sep}` })
+          .pipe(Effect.flip);
+        const underFile = yield* workspaceEntries
+          .browse({ partialPath: `${path.join(cwd, "file.txt")}${path.sep}` })
+          .pipe(Effect.flip);
+
+        expect(missing).toMatchObject({
+          _tag: "WorkspaceEntriesReadDirectoryError",
+          pathMissing: true,
+        });
+        expect(underFile).toMatchObject({
+          _tag: "WorkspaceEntriesReadDirectoryError",
+          pathMissing: false,
         });
       }),
     );

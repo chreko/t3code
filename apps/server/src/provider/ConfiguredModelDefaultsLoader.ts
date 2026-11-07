@@ -12,6 +12,7 @@
 
 import * as NodeOS from "node:os";
 
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -93,8 +94,11 @@ export const make = Effect.gen(function* () {
     "ConfiguredModelDefaultsLoader.loadOpenCode",
   )(function* (input) {
     const projectConfig = yield* readOptionalFile(path.join(input.workspaceRoot, "opencode.json"));
-    const configHome =
-      nonEmpty(process.env["XDG_CONFIG_HOME"]) ?? path.join(NodeOS.homedir(), ".config");
+    // Defaulted, so only a broken ConfigProvider can fail this; that is a defect.
+    const xdgConfigHome = yield* Effect.orDie(
+      Config.String("XDG_CONFIG_HOME").pipe(Config.withDefault("")),
+    );
+    const configHome = nonEmpty(xdgConfigHome) ?? path.join(NodeOS.homedir(), ".config");
     const userConfig = yield* readOptionalFile(path.join(configHome, "opencode", "opencode.json"));
     return mergeOpenCodeConfiguredValues({ projectConfig, userConfig });
   });

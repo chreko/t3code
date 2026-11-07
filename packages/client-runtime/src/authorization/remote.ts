@@ -12,6 +12,8 @@ import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
 import { hashTelemetryId } from "@t3tools/shared/telemetryId";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import { environmentEndpointUrl } from "../environment/endpoint.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
@@ -26,6 +28,7 @@ export type RemoteEnvironmentAuthError = RemoteEnvironmentRequestError;
 
 // A remote host under heavy disk IO can take 10-20 s to persist a new auth session.
 const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 30_000;
+const isUndeclaredStatusError = Schema.is(RemoteEnvironmentAuthUndeclaredStatusError);
 
 const clientMetadataTokenExchangeFields = (
   clientMetadata: AuthClientPresentationMetadata | undefined,
@@ -205,8 +208,7 @@ const issueWebSocketTicketWithFallback = <E, R>(
     ? issue(use)
     : issue(use).pipe(
         Effect.catchIf(
-          (error) =>
-            error instanceof RemoteEnvironmentAuthUndeclaredStatusError && error.status === 404,
+          (error) => isUndeclaredStatusError(error) && error.status === 404,
           () => issue(undefined),
         ),
       );
@@ -291,7 +293,7 @@ export const resolveRemoteWebSocketConnectionUrl = Effect.fn(
   });
 
   const url = rpcSocketUrl(input.wsBaseUrl);
-  url.searchParams.set("wsTicket", issued.ticket);
+  url.searchParams.set("wsTicket", Redacted.value(issued.ticket));
   appendClientConnectionParams(
     url,
     input.clientMetadata,
@@ -344,9 +346,9 @@ export const resolveRemoteDpopWebSocketConnectionUrl = Effect.fn(
   const upgradeProof = yield* input.createProof({
     method: "GET",
     url: `${url.protocol === "wss:" ? "https:" : "http:"}//${url.host}${url.pathname}`,
-    accessToken: issued.ticket,
+    accessToken: Redacted.value(issued.ticket),
   });
-  url.searchParams.set("wsTicket", issued.ticket);
+  url.searchParams.set("wsTicket", Redacted.value(issued.ticket));
   url.searchParams.set("dpop", upgradeProof);
   appendClientConnectionParams(
     url,
