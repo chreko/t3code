@@ -7,10 +7,10 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
 hard-disabled, the configured-model default, terminal middle-click and host-clipboard
-paste, a 30 s remote auth timeout, and two cherry-picked upstream PRs that show symlinks
-(#21920 in the Files tree, #8281 in the path picker; both open when picked, 2026-10-24).
-On top of #21920 the fork lists links that leave the project too, with a `linkTarget`
-that the web and mobile trees open as a host path. Three former patches are retired because upstream
+paste, a 30 s remote auth timeout, and one cherry-picked upstream PR that shows symlinks
+in the path picker (#8281; closed 2026-10-28 in favour of #26168, still open 2026-11-10). The Files-tree pick (#21920) is
+retired: it landed upstream as a3cf3f0fe7. On top of it the fork still lists links that
+leave the project, with a `linkTarget` that the web and mobile trees open as a host path. Three former patches are retired because upstream
 now does the same thing: packaging `homepage`/`maintainer` (c13f7d93ff), Alt+Enter as a
 newline (the keybindings resolver in `composer-logic.ts` returns null on `event.altKey`),
 and the server state lock (`acquireServerStateLock`), replaced by upstream's
@@ -77,17 +77,19 @@ that way, and taking upstream's side is the right resolution when it happens.
   whatever upstream does there. The fork's only tests in that file are the
   `shouldPastePrimarySelection` block; upstream deleting its own tests (#22557) wins.
 - `scripts/build-desktop-artifact.ts`: upstream's `homepage`/`maintainer` win.
-- `apps/server/src/workspace/WorkspaceEntries.ts` and its test: the symlink commits are
-  upstream's own PRs, so once #21920 or #8281 lands on main (likely squashed, so git
-  won't see the cherry-picks as duplicates), take upstream's side of that function and
-  its tests; then drop the PR from the opening paragraph. The picks added
-  `import * as NodeFSP from "node:fs/promises"` to the test, which main had dropped.
-  Then re-apply the fork's outside-link commit to upstream's `resolveSymlinkKind`:
-  upstream hides links outside the root, the fork records them in `linkTargets`. Its
-  test `lists a link that leaves the workspace with the real path it opens` fails if
-  that was lost; the clients (`ProjectEntry.linkTarget` in contracts,
+- `apps/server/src/workspace/WorkspaceEntries.ts` and its test: upstream owns this
+  function now, so take its side of every hunk, then re-apply the fork's outside-link
+  listing to `resolveSymlinkKind`. Upstream returns undefined for anything outside the
+  root; the fork instead stats it, records the real path in `linkTargets`, and returns
+  the kind, which is what `?? (linkTarget === undefined ? {} : { linkTarget })` on the
+  entry needs. Keep upstream's own additions whole: the canonical-ancestor cycle guard
+  and `nestedGitRoots`, which the surrounding Effect reads further down. In the test,
+  the fork's `path: "outside-link"` expectation and its
+  `lists a link that leaves the workspace with the real path it opens` test stay; every
+  other hunk is upstream's. The clients (`ProjectEntry.linkTarget` in contracts,
   `FileBrowserPanel`, `FileBreadcrumbs`, mobile `fileTree`/`FileTreeBrowser`) conflict
-  only if upstream changed those files.
+  only if upstream changed those files. If #26168 lands too, take upstream's side there
+  and drop it from the opening paragraph.
 - A test file upstream deleted wins the modify/delete if our change was only harness
   wiring; check the wiring still exists in the real code.
 
@@ -115,7 +117,7 @@ Some failure modes show up only in `tsc` or the tests, never as conflict markers
 export PATH=$HOME/.nvm/versions/node/v24.13.1/bin:$PWD/node_modules/.bin:$PATH
 CI=true vp i                # CI=true lets pnpm purge node_modules without a TTY
 for d in apps/web packages/contracts apps/server apps/desktop; do
-  echo "== $d: $(cd $d && tsc --noEmit 2>&1 | grep -c 'error TS') errors"; done
+  echo "== $d: $(cd $d && effect-tsgo tsrs --noEmit 2>&1 | grep -c 'error TS') errors"; done
 (cd apps/server && vp test run src/orchestration-v2/runtimeLayer.test.ts \
   src/provider/ConfiguredModelDefaultsLoader.test.ts src/ws.test.ts)
 (cd apps/web && vp test run --project unit src/components/chat/ src/composer-logic.test.ts src/composerConfiguredModelSeed.test.ts \
@@ -128,9 +130,39 @@ the Claude resolver, whose driver kind is `claudeAgent`, not `claude`), and midd
 paste tests. Root `package.json` pins `engines.node` to an exact Node 26 release; nvm's
 24.13.1 still installs, typechecks and tests with only a warning, and nothing enforces
 the pin. `tsc` also prints many
-`suggestion TS3771xx` lines from the Effect language service; those are not errors. No
+`suggestion TS3771xx` lines from the Effect language service; those are not errors, but
+its `error TS3770xx` rules are, and they tighten over time: `processEnvInEffect` and
+`missingEffectError` both first failed on fork code that had typechecked for months.
+Typecheck is `effect-tsgo tsrs --noEmit` since upstream replaced `@tsc-rs/typescript`
+with `@effect/tsgo`; `apps/web` and `apps/desktop` declare no `typecheck` script, so
+run the binary in each directory rather than through a package script. No
 repo-wide checks (`vp check`, `vp run -r ...`). Commit as
 `merge: origin/main into the Fedora build`, noting any conflict you resolved.
+
+**A green typecheck and green tests do not mean the rpm runs.** They exercise the pnpm
+dev tree, where peer dependencies are linked and every import resolves. electron-builder
+packages only `dependencies` and `optionalDependencies`, so a dependency that upstream
+(or a bumped transitive package) turned into a peer is dropped from the asar and the
+backend dies on first require with `Cannot find module`, in a restart loop that reports
+only `code=1`. This shipped 0.1.3: `@cursor/sdk` 1.0.38 made `zod` a peer and no
+workspace package declared it. After step 3, before step 4, check the package you built
+actually contains what it needs:
+
+```bash
+V=$(node -p "require('./apps/desktop/package.json').version")
+D=$(mktemp -d) && (cd "$D" && rpm2cpio ~/git/t3code/dist/T3-Code-$V-x86_64.rpm \
+  | cpio -id --quiet './opt/T3 Code (Beta)/resources/app.asar')
+node -e '
+const asar = require("/home/user/git/t3code/node_modules/.pnpm/@electron+asar@4.3.0/node_modules/@electron/asar/lib/asar.js");
+const files = asar.listPackage(process.argv[1], { isPack: false });
+const top = new Set(files.filter((f) => /^[/\\]node_modules[/\\]/.test(f)).map((f) => f.split(/[/\\]/)[2]));
+console.log([...top].sort().join("\n"));
+' "$D/opt/T3 Code (Beta)/resources/app.asar'
+```
+
+Diff that list against the previous working rpm's; a package that disappeared is the
+bug. `zod` must be present. The asar's own `node_modules` is the only copy the backend
+can require, so anything missing there is missing at runtime.
 
 ## 3. Build on eschdorf-ai
 
