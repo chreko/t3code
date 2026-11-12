@@ -718,6 +718,10 @@ function EditableFileSurface({
   }
   const { ready: editable, onPostRender: onEditablePostRender } =
     useEditableAfterHighlight(externalFile);
+  // Pierre measures glyph width once per editor, so a code font change needs a fresh one or carets drift.
+  const codeFontKey = useClientSettings(
+    (settings) => `${settings.fontSizeCode}:${settings.fontFamilyCode}`,
+  );
   const editorRef = useRef<Editor<"file", FileCommentAnnotationGroup, undefined> | null>(null);
   const editorOptions: EditorOptions<"file", FileCommentAnnotationGroup, undefined> = {
     onAttach: (editor) => {
@@ -888,6 +892,7 @@ function EditableFileSurface({
           }}
         >
           <File<FileCommentAnnotationGroup>
+            key={codeFontKey}
             file={externalFile}
             edit={editable}
             editorOptions={editorOptions}
