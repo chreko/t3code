@@ -2,7 +2,7 @@ import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3
 import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { hasDismissedResumeCompaction } from "@t3tools/client-runtime/state/context-window";
-import { hasAvailableCompactionProvider } from "./compaction.logic";
+import { contextWindowTone, hasAvailableCompactionProvider } from "./compaction.logic";
 
 function claudeProvider(input: {
   instanceId: string;
@@ -105,5 +105,19 @@ describe("hasDismissedResumeCompaction", () => {
         },
       ]),
     ).toBe(false);
+  });
+});
+
+describe("contextWindowTone", () => {
+  it.each([
+    [59_999, 200_000, "success"],
+    [60_000, 200_000, "warning"],
+    [109_999, 200_000, "warning"],
+    [110_000, 200_000, "error"],
+    [109_999, 1_000_000, "success"],
+    [110_000, 1_000_000, "warning"],
+    [550_000, 1_000_000, "error"],
+  ] as const)("%i of %i tokens is %s", (usedTokens, maxTokens, tone) => {
+    expect(contextWindowTone(usedTokens, maxTokens)).toBe(tone);
   });
 });

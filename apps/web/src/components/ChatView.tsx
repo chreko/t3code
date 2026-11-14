@@ -2958,6 +2958,10 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
+  // Goes through the composer so its own busy and pending-input guards still apply.
+  const compactContextFromThreadDetailsStable = useStableCallback(() =>
+    composerRef.current?.compactContext(),
+  );
   // Read from the projection the footer renders, so the scroll below sees the new message.
   const pendingGuestMessageIds =
     serverProjection?.thread.guestShare?.messages.flatMap((message) =>
@@ -3885,6 +3889,12 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                   }}
+                  {...(canOperateThread && isServerThread && manualCompactionProviderAvailable
+                    ? {
+                        onCompactContext: compactContextFromThreadDetailsStable,
+                        compactContextDisabled: compactDisabled,
+                      }
+                    : {})}
                 />
 
                 <PullRequestThreadDialogHost

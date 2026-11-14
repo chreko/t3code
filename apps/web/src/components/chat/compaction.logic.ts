@@ -40,3 +40,13 @@ export function formatContextWindowCompactionMessage(autoCompactThreshold?: numb
   }
   return "Context compacts automatically when needed.";
 }
+
+// Quality degrades long before the hard limit: green stays under 30% of the window (at most 110k
+// tokens), and red from 55% says to compact or hand off. Matches the Claude Code status line.
+export function contextWindowTone(
+  usedTokens: number,
+  maxTokens: number,
+): "success" | "warning" | "error" {
+  if (usedTokens * 100 < Math.min(maxTokens * 30, 11_000_000)) return "success";
+  return usedTokens * 100 >= maxTokens * 55 ? "error" : "warning";
+}

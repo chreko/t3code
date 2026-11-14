@@ -12,6 +12,7 @@ import {
   paceOf,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
+import { Minimize2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
@@ -20,8 +21,9 @@ import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/contex
 import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { cn } from "../../lib/utils";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { formatContextWindowCompactionMessage } from "./compaction.logic";
+import { contextWindowTone, formatContextWindowCompactionMessage } from "./compaction.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 
 const PACE_LABEL: Record<LimitPace, string> = {
@@ -37,7 +39,7 @@ export interface ThreadDetailsUsageInput {
   readonly contextWindow: ContextWindowSnapshot | null;
 }
 
-type UsageTone = "error" | "warning" | null;
+type UsageTone = "success" | "error" | "warning" | null;
 
 /** The selected provider's limit windows. Each row reads as room left. */
 export function ThreadDetailsUsage({
@@ -83,7 +85,15 @@ export function ThreadDetailsUsage({
 }
 
 /** The thread's context window. The bar fills as context is used; the tick marks auto-compaction. */
-export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowSnapshot }) {
+export function ThreadDetailsContext({
+  usage,
+  onCompact,
+  compactDisabled = false,
+}: {
+  readonly usage: ContextWindowSnapshot;
+  readonly onCompact?: (() => void) | undefined;
+  readonly compactDisabled?: boolean;
+}) {
   const maxTokens = usage.maxTokens != null && usage.maxTokens > 0 ? usage.maxTokens : null;
   const used =
     maxTokens !== null && usage.usedPercentage !== null
@@ -105,9 +115,8 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
         <UsageRow
           label="Context"
           fill={used}
-          tone={used === null ? null : used >= 90 ? "error" : used >= 80 ? "warning" : null}
+          tone={maxTokens !== null ? contextWindowTone(usage.usedTokens, maxTokens) : null}
           tick={tick}
-          muted
           value={
             maxTokens !== null
               ? `${usedTokens} / ${formatContextWindowTokens(maxTokens)}`
@@ -133,6 +142,14 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
             </>
           }
         />
+        {onCompact ? (
+          <div className="col-span-3 px-0.5 pt-1">
+            <Button size="xs" variant="ghost-muted" disabled={compactDisabled} onClick={onCompact}>
+              <Minimize2Icon aria-hidden="true" />
+              Compact context
+            </Button>
+          </div>
+        ) : null}
       </div>
     </ThreadDetailsSection>
   );
@@ -183,7 +200,6 @@ function UsageRow({
   value,
   ariaValue = value,
   tooltip,
-  muted = false,
 }: {
   readonly label: string;
   /** Bar fill from 0 to 100. Null hides the bar. */
@@ -194,7 +210,6 @@ function UsageRow({
   readonly value: string;
   readonly ariaValue?: string;
   readonly tooltip: ReactNode;
-  readonly muted?: boolean;
 }) {
   return (
     <Tooltip>
@@ -218,8 +233,8 @@ function UsageRow({
                     ? "bg-error"
                     : tone === "warning"
                       ? "bg-warning"
-                      : muted
-                        ? "bg-muted-foreground"
+                      : tone === "success"
+                        ? "bg-success"
                         : "bg-foreground/80",
                 )}
                 style={{ width: `max(${fill}%, 6px)` }}
@@ -243,9 +258,11 @@ function UsageRow({
               ? "text-error-foreground"
               : tone === "warning"
                 ? "text-warning-foreground"
-                : fill === null
-                  ? "text-muted-foreground"
-                  : "text-foreground/80",
+                : tone === "success"
+                  ? "text-success-foreground"
+                  : fill === null
+                    ? "text-muted-foreground"
+                    : "text-foreground/80",
           )}
         >
           {value}
