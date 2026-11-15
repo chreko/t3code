@@ -21,6 +21,11 @@ const SAFE_INTEGER_BOUNDS: Record<string, number> = {
   minimum: Number.MIN_SAFE_INTEGER,
 };
 
+// llama.cpp compiles tool schemas to a grammar and rejects the whole request on a length
+// bound of 2000 or more, or a regex class such as `\S`. Decoding still enforces both.
+const isGrammarBreaking = (key: string, value: Json) =>
+  key === "pattern" || (key === "maxLength" && typeof value === "number" && value >= 2000);
+
 const tagOf = (branch: JsonObject, key: string): Json => {
   const property = Predicate.isObject(branch.properties) ? branch.properties[key] : undefined;
   return Predicate.isObject(property) && Array.isArray(property.enum) && property.enum.length === 1
@@ -74,7 +79,7 @@ const compact = (schema: Json, optional: boolean): Json => {
   let result: JsonObject = {};
   for (const [key, value] of Object.entries(schema)) {
     if (key === "additionalProperties" && value === true) continue;
-    if (SAFE_INTEGER_BOUNDS[key] === value) continue;
+    if (SAFE_INTEGER_BOUNDS[key] === value || isGrammarBreaking(key, value)) continue;
     result[key] =
       key === "properties" && Predicate.isObject(value)
         ? Object.fromEntries(
@@ -98,8 +103,8 @@ const compact = (schema: Json, optional: boolean): Json => {
 
 /**
  * The input schema T3 advertises for a tool. Drops JSON noise that every thread pays for:
- * `additionalProperties: true`, safe-integer bounds, nested `anyOf`, JSON-string fallbacks, and
- * the `null` branch of optional properties. A tagged union of objects becomes one object.
+ * `additionalProperties: true`, safe-integer bounds, `pattern`, `maxLength` of 2000 or more,
+ * nested `anyOf`, JSON-string fallbacks, and the `null` branch of optional properties. A tagged union of objects becomes one object.
  * Decoding still uses the full schema, so each tag's own required fields still apply.
  */
 export const advertisedJsonSchema = (tool: Tool.Any) =>

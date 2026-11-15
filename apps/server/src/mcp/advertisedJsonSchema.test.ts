@@ -4,13 +4,16 @@ import { Tool } from "effect/ai";
 
 import { advertisedJsonSchema } from "./advertisedJsonSchema.ts";
 
-it("drops JSON noise, merges tagged unions, and keeps null where it is required", () => {
+it("drops JSON noise and grammar-breaking bounds, merges tagged unions, and keeps null where it is required", () => {
   const Every = Schema.Struct({ ms: Schema.Int });
   const tool = Tool.make("example", {
     parameters: Schema.Struct({
       threadId: Schema.optional(Schema.NullOr(Schema.String)),
       beforeRunId: Schema.NullOr(Schema.String),
       limit: Schema.optional(Schema.Int),
+      title: Schema.String.check(Schema.isMaxLength(80)),
+      brief: Schema.String.check(Schema.isMaxLength(2000)),
+      url: Schema.String.check(Schema.isPattern(/^\S+$/)),
       every: Schema.Union([Every, Schema.fromJsonString(Every)]),
       target: Schema.optional(
         Schema.NullOr(
@@ -29,6 +32,9 @@ it("drops JSON noise, merges tagged unions, and keeps null where it is required"
       threadId: { type: "string" },
       beforeRunId: { anyOf: [{ type: "string" }, { type: "null" }] },
       limit: { type: "integer" },
+      title: { type: "string", maxLength: 80 },
+      brief: { type: "string" },
+      url: { type: "string" },
       every: { type: "object", properties: { ms: { type: "integer" } }, required: ["ms"] },
       target: {
         type: "object",
@@ -40,6 +46,6 @@ it("drops JSON noise, merges tagged unions, and keeps null where it is required"
         required: ["kind"],
       },
     },
-    required: ["beforeRunId", "every"],
+    required: ["beforeRunId", "title", "brief", "url", "every"],
   });
 });
