@@ -664,7 +664,10 @@ const turnTokenUsage = (turn: ActiveTurn, status: OrchestrationV2ProviderTurn["s
       };
 };
 
-export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: ProviderInstanceId) {
+export const make = Effect.fn("OpenCode2Adapter.make")(function* (
+  instanceId: ProviderInstanceId,
+  settings: { readonly t3Tools: boolean },
+) {
   const server = yield* OpenCode2Server.OpenCode2Server;
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const host = yield* ProviderHost.ProviderHost;
@@ -3094,7 +3097,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       const name = yield* mcpServerNameFor(turnInput.threadId);
       // An external server may not reach T3's MCP endpoint, as with 1.x.
       const wanted =
-        mcpSession === undefined || connection.external
+        mcpSession === undefined || connection.external || !settings.t3Tools
           ? undefined
           : { name, directory, credential: mcpSession.authorizationHeader };
       if (

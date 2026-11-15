@@ -50,13 +50,22 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
         },
       }),
     ),
+    t3Tools: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({
+        title: "T3 Code tools",
+        description:
+          "Give OpenCode T3 Code's tools, such as threads, delegation, and previews. Turn off for local models with small context windows.",
+        providerSettingsForm: { control: "switch" },
+      }),
+    ),
     customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
   {
-    order: ["binaryPath", "serverUrl", "serverPassword"],
+    order: ["binaryPath", "serverUrl", "serverPassword", "t3Tools"],
   },
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;

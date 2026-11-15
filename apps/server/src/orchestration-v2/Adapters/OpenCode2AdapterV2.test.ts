@@ -322,6 +322,7 @@ const resumed = (
     readonly resolveExtractedTextPath?: (path: string) => Effect.Effect<string | undefined>;
     readonly fileSystem?: FileSystem.FileSystem;
     readonly onPrompt?: (input: unknown) => void;
+    readonly t3Tools?: boolean;
   },
 ) =>
   Effect.gen(function* () {
@@ -346,6 +347,7 @@ const resumed = (
         ...(options?.onPrompt === undefined ? {} : { onPrompt: options.onPrompt }),
         ...(options?.external === undefined ? {} : { external: options.external }),
         ...(options?.replayGate === undefined ? {} : { replayGate: options.replayGate }),
+        ...(options?.t3Tools === undefined ? {} : { t3Tools: options.t3Tools }),
         ...(options?.attachmentsDir === undefined
           ? {}
           : { attachmentsDir: options.attachmentsDir }),
@@ -2880,6 +2882,33 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         yield* runtime.startTurn(turnInput(thread));
         assert.equal((yield* Fiber.join(terminal))?.status, "completed");
       }
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("leaves T3 MCP out when T3 Code tools are off", () =>
+    Effect.gen(function* () {
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+      yield* mcpSessions.set({
+        environmentId: EnvironmentId.make("environment:opencode2-adapter"),
+        threadId,
+        providerSessionId: "mcp:opencode2-adapter",
+        providerInstanceId: instanceId,
+        endpoint: "http://127.0.0.1:3773/mcp",
+        authorizationHeader: "Bearer thread-credential",
+        browserToolsAvailable: false,
+      });
+      yield* Effect.addFinalizer(() => mcpSessions.clear(threadId));
+      const { runtime, thread } = yield* resumed(
+        [
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          event("session.execution.succeeded", { sessionID: SESSION }),
+        ],
+        { t3Tools: false },
+      );
+      const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread));
+      assert.equal((yield* Fiber.join(terminal))?.status, "completed");
     }).pipe(Effect.scoped),
   );
 

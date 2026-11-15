@@ -9,6 +9,7 @@ import type { OpencodeClient, ToolPart } from "@opencode-ai/sdk/v2";
 import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import {
   CheckpointId,
+  EnvironmentId,
   NodeId,
   ProjectId,
   ProviderInstanceId,
@@ -358,6 +359,58 @@ describe("OpenCodeAdapterV2", () => {
       );
       assert.equal(terminal?.status, "failed");
       assert.equal(terminal?.failure?.class, "usage_limit");
+    }).pipe(
+      Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer)),
+      Effect.scoped,
+    ),
+  );
+
+  it.effect.each([true, false])("adds T3 MCP only when T3 Code tools are on (%s)", (t3Tools) =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("opencode-test");
+      const threadId = ThreadId.make("thread-opencode-t3-tools");
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+      yield* mcpSessions.set({
+        environmentId: EnvironmentId.make("environment-opencode-t3-tools"),
+        threadId,
+        providerSessionId: "mcp:opencode-t3-tools",
+        providerInstanceId: instanceId,
+        endpoint: "http://127.0.0.1:3773/mcp",
+        authorizationHeader: "Bearer thread-credential",
+        browserToolsAvailable: false,
+      });
+      const added: Array<string> = [];
+      const client = {
+        event: { subscribe: async () => ({ stream: asyncEventStream().stream }) },
+        mcp: {
+          add: async (input: { readonly name: string }) => {
+            added.push(input.name);
+            return { data: true };
+          },
+        },
+      };
+      const adapter = yield* makeOpenCodeAdapterV2({
+        instanceId,
+        settings: { ...OPEN_CODE_TEST_SETTINGS, t3Tools },
+        environment: {},
+      }).pipe(
+        Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, {
+          connectToOpenCodeServer: () =>
+            Effect.succeed({ url: "http://test.invalid", external: false, exitCode: null }),
+          createOpenCodeSdkClient: () => client,
+        } as unknown as OpenCodeRuntime.OpenCodeRuntime["Service"]),
+        Effect.provideService(ProviderHost.ProviderHost, {
+          paths: { cwd: "/workspace" },
+          resolveAttachmentPath: () => null,
+        } as unknown as ProviderHost.ProviderHost["Service"]),
+      );
+      yield* adapter.openSession({
+        threadId,
+        providerSessionId: ProviderSessionId.make("session-opencode-t3-tools"),
+        modelSelection: { instanceId, model: "eschdorf-ai/qwen3vl-8b", options: [] },
+        runtimePolicy: runtimePolicy("full-access", { cwd: "/workspace" }),
+      });
+      assert.deepStrictEqual(added, t3Tools ? ["t3-code"] : []);
     }).pipe(
       Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer)),
       Effect.scoped,
