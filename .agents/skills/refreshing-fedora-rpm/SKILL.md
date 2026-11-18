@@ -174,7 +174,7 @@ skill and retry. Read the version after the merge, since upstream bumps it:
 V=$(node -p "require('./apps/desktop/package.json').version")
 ~/.claude/skills/run-on-eschdorf-ai/scripts/push-and-package.sh /home/user/git/t3code fedora \
   --exclude release --exclude .t3 --exclude .claude/worktrees \
-  --build-cmd 'export CI=true LD_LIBRARY_PATH=$HOME/.local/opt/libxcrypt-compat/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+  --build-cmd 'export CI=true T3CODE_GLIBC_BUILD_CEILING=2.43 LD_LIBRARY_PATH=$HOME/.local/opt/libxcrypt-compat/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
                rm -rf release && corepack pnpm install --frozen-lockfile &&
                corepack pnpm exec node scripts/build-desktop-artifact.ts --platform linux --target $PKG_TARGET --arch x64' \
   --artifact 'release/*.$PKG_TARGET'
@@ -226,6 +226,13 @@ package into that same directory instead — `pacman -Sp libxcrypt-compat` print
 `curl -fLO` it, and `tar -I zstd -xf <pkg>.tar.zst -C $D usr/lib` extracts it. That
 fallback has not been exercised since the Omarchy migration; the extracted directory
 predates it.
+
+**`T3CODE_GLIBC_BUILD_CEILING` is load-bearing.** Since 0.1.10 the Linux afterPack hook
+(`scripts/linux-glibc.ts`) refuses any native module that needs a newer glibc than upstream's
+Ubuntu 24.04 builders (2.39). Native modules compiled on the box (glibc 2.44 on
+2026-11-18) exceed that: node-pty needed 2.42. The fork's override raises the ceiling to
+the template's glibc, 2.43 for Fedora 44, and the check still refuses a module the
+template could not load. Raise it with the template's Fedora release, not the box's glibc.
 
 **libsecret needs nothing.** The build compiles a browser-secret helper against
 libsecret, and Arch ships the headers in the main package, so `pkg-config --exists
