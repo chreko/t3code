@@ -55,7 +55,8 @@ git status --short          # must be clean apart from untracked scripts/package
 git fetch origin main && git merge origin/main --no-edit
 ```
 
-Resolve with the `resolving-merge-conflicts` skill; never abort. Before keeping a fork
+Resolve each hunk by hand; never abort. `git log $MB..HEAD -- <file>` names the fork
+commit behind a hunk, and its message says what the hunk is for. Before keeping a fork
 hunk, check whether upstream now does the same thing. Two patches have been retired
 that way, and taking upstream's side is the right resolution when it happens.
 

@@ -29,6 +29,7 @@ const PROVIDERS = [claudeProvider(["claude-fable-5", "claude-opus-5", "claude-so
 
 const BASE = {
   draft: null,
+  threadStarted: false,
   providers: PROVIDERS,
   selectedProvider: ProviderDriverKind.make("claudeAgent"),
   selectedInstanceId: INSTANCE,

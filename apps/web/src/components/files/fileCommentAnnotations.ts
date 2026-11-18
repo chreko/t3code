@@ -1,4 +1,6 @@
 import type { LineAnnotation, SelectedLineRange } from "@pierre/diffs";
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "~/i18n/messages";
 
 export interface FileCommentAnnotationEntry {
   id: string;
@@ -31,8 +33,14 @@ export function normalizeFileCommentRange(range: SelectedLineRange): {
   };
 }
 
-export function formatFileCommentRange(startLine: number, endLine: number): string {
-  return startLine === endLine ? `L${startLine}` : `L${startLine} to L${endLine}`;
+export function formatFileCommentRange(
+  startLine: number,
+  endLine: number,
+  resolve: MessageResolver = m,
+): string {
+  return startLine === endLine
+    ? `L${startLine}`
+    : resolve(msg("L{start} to L{end}", { start: String(startLine), end: String(endLine) }));
 }
 
 export function remapFileCommentAnnotations(
@@ -53,18 +61,10 @@ export function remapFileCommentAnnotations(
   }));
 }
 
-/** Keeps drafts and the comments still in the prompt; returns the same array when nothing left. */
-export function retainPromptFileComments(
-  annotations: FileCommentLineAnnotation[],
+/** Drafts and the comments still in the prompt; sent or removed ones are not shown or re-added. */
+export function promptFileCommentEntries(
+  entries: ReadonlyArray<FileCommentAnnotationEntry>,
   promptCommentIds: ReadonlySet<string>,
-): FileCommentLineAnnotation[] {
-  const isRetained = (entry: FileCommentAnnotationEntry) =>
-    entry.kind === "draft" || promptCommentIds.has(entry.id);
-  if (annotations.every((annotation) => annotation.metadata.entries.every(isRetained))) {
-    return annotations;
-  }
-  return annotations.flatMap((annotation) => {
-    const entries = annotation.metadata.entries.filter(isRetained);
-    return entries.length > 0 ? [{ ...annotation, metadata: { entries } }] : [];
-  });
+): FileCommentAnnotationEntry[] {
+  return entries.filter((entry) => entry.kind === "draft" || promptCommentIds.has(entry.id));
 }

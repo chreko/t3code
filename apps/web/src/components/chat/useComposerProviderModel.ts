@@ -3,6 +3,7 @@ import {
   deriveEffectiveComposerModelState,
   useComposerDraftModelState,
 } from "../../composerDraftStore";
+import { draftModelSelectionApplies } from "../../lib/chatThreadActions";
 import {
   type EnvironmentId,
   type ModelSelection,
@@ -44,6 +45,7 @@ export function useComposerProviderModel(
     readonly threadModelSelection: ModelSelection | null | undefined;
     readonly projectModelSelection: ModelSelection | null | undefined;
     readonly promptInjectionState: ReturnType<typeof getComposerPromptInjectionState>;
+    readonly threadStarted: boolean;
   },
 ) {
   const {
@@ -59,6 +61,7 @@ export function useComposerProviderModel(
     candidateInstanceIds,
     lockedProvider,
     lockedInstanceId,
+    threadStarted,
   } = input;
   const draftModelState = useComposerDraftModelState(threadRef);
   const configuredModelDefaults = useConfiguredModelDefaults({ environmentId, cwd });
@@ -69,7 +72,12 @@ export function useComposerProviderModel(
   );
   const selection = resolveComposerProviderSelection({
     entries: providerInstanceEntries,
-    candidateInstanceIds,
+    candidateInstanceIds: [
+      draftModelSelectionApplies(draftModelState, threadStarted)
+        ? draftModelState.activeProvider
+        : null,
+      ...candidateInstanceIds,
+    ],
     lockedProvider,
     lockedInstanceId,
   });
@@ -80,6 +88,7 @@ export function useComposerProviderModel(
   const selectedProviderModels = selection.selectedProviderEntry?.models ?? NO_PROVIDER_MODELS;
   const modelState = deriveEffectiveComposerModelState({
     draft: draftModelState,
+    threadStarted,
     providers: providerStatuses,
     selectedProvider,
     selectedInstanceId,

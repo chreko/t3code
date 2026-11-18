@@ -1,4 +1,7 @@
 import type { ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
+import { msg } from "gt-react";
+
+import { getActiveLocale, m, type MessageResolver } from "../../i18n/messages";
 import {
   resolveSelectableProviderInstanceEntry,
   type ProviderInstanceEntry,
@@ -34,11 +37,19 @@ export function hasAvailableCompactionProvider(input: {
   );
 }
 
-export function formatContextWindowCompactionMessage(autoCompactThreshold?: number | null): string {
+export function formatContextWindowCompactionMessage(
+  autoCompactThreshold?: number | null,
+  resolve: MessageResolver = m,
+  locale: string = getActiveLocale(),
+): string {
   if (typeof autoCompactThreshold === "number" && autoCompactThreshold > 0) {
-    return `Compacts automatically at about ${autoCompactThreshold.toLocaleString("en-US")} tokens.`;
+    return resolve(
+      msg("Compacts automatically at about {tokens} tokens.", {
+        tokens: autoCompactThreshold.toLocaleString(locale),
+      }),
+    );
   }
-  return "Context compacts automatically when needed.";
+  return resolve(msg("Context compacts automatically when needed."));
 }
 
 // Quality degrades long before the hard limit: green stays under 30% of the window (at most 110k

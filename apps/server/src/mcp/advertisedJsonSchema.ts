@@ -25,6 +25,9 @@ const SAFE_INTEGER_BOUNDS: Record<string, number> = {
 // bound of 2000 or more, or a regex class such as `\S`. Decoding still enforces both.
 const isGrammarBreaking = (key: string, value: Json) =>
   key === "pattern" || (key === "maxLength" && typeof value === "number" && value >= 2000);
+// Gemini rejects function declarations whose enums hold anything but strings.
+const isNonStringEnum = (key: string, value: Json) =>
+  key === "enum" && Array.isArray(value) && value.some((item) => typeof item !== "string");
 
 const tagOf = (branch: JsonObject, key: string): Json => {
   const property = Predicate.isObject(branch.properties) ? branch.properties[key] : undefined;
@@ -80,6 +83,7 @@ const compact = (schema: Json, optional: boolean): Json => {
   for (const [key, value] of Object.entries(schema)) {
     if (key === "additionalProperties" && value === true) continue;
     if (SAFE_INTEGER_BOUNDS[key] === value || isGrammarBreaking(key, value)) continue;
+    if (isNonStringEnum(key, value)) continue;
     result[key] =
       key === "properties" && Predicate.isObject(value)
         ? Object.fromEntries(

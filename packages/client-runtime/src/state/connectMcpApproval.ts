@@ -2,6 +2,8 @@
  * The hosted app's side of an agent sign-in on a T3 Connect environment: it reads the request
  * and sends the decision with the owner's own Connect session there, so no code is needed.
  */
+import { msg } from "gt-i18n";
+import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import type {
   AuthMcpApprovalDecisionRequest,
   AuthMcpApprovalDetails,
@@ -9,6 +11,7 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
@@ -27,7 +30,11 @@ export class ConnectMcpApprovalUnavailableError extends Schema.TaggedError<Conne
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not reach that environment through T3 Connect with this account.";
+    return markedTextEnglish(this.i18nMessage);
+  }
+
+  get i18nMessage(): MarkedText {
+    return [msg("Could not reach that environment through T3 Connect with this account.")];
   }
 }
 
@@ -75,8 +82,16 @@ const callConnectMcpApproval = Effect.fn("clientRuntime.state.connectMcpApproval
         }),
       },
       signer: yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner),
-      remoteAuthorization: yield* Effect.serviceOption(
-        RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+      // A token for an unsaved environment is not cached, so reuse this one until it is rejected.
+      remoteAuthorization: Option.some(
+        RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization.of({
+          ...remote,
+          // Untraced: the relay authorization it may call owns the span.
+          authorizeDpopHttp: Effect.fnUntraced(function* (request) {
+            if (request.rejectedAccessToken === undefined) return authorized;
+            return yield* remote.authorizeDpopHttp(request);
+          }),
+        }),
       ),
       group: "mcpOAuth",
       method: "POST",
