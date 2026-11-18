@@ -253,6 +253,24 @@ libsecret-1` already succeeds system-wide. The old Kali `PKG_CONFIG_PATH` export
    The package is named `t3code`, so a newer version upgrades in place. Same version as
    last time: `dnf install` says "already installed", use `sudo dnf reinstall`. Then shut
    the template down; AppVMs pick it up on their next start.
+4. eschdorf-ai runs the fork's server too. The desktop app's SSH launcher runs
+   `~chreko/.t3/runtime/versions/$V/t3` there and, when that folder is not ready,
+   downloads **upstream's** archive into it, which lacks the fork's patches (the
+   llama.cpp schema fix above all: upstream's tool list fails every llama-swap turn with
+   "failed to parse grammar"). The release archive script (`scripts/build-cli-archive.ts`)
+   assumes Ubuntu, so instead run the rpm's own server with `ELECTRON_RUN_AS_NODE=1`, as
+   `~/.t3/bin/t3` there already does. As `chreko` (`ssh eschdorf-ai`):
+   - unpack the rpm's `/opt/T3 Code (Beta)/` to `~/.t3/fork-runtime/$V/` (rsync from here);
+   - if the launcher already made `~/.t3/runtime/versions/$V/`, move it to
+     `~/.t3/runtime/upstream-$V` for rollback, never inside `versions/`;
+   - `versions/$V/` then holds only `.install-complete` (the line `$V`) and an
+     executable `t3`:
+     `export ELECTRON_RUN_AS_NODE=1; app="$HOME/.t3/fork-runtime/$V"; exec "$app/t3code" "$app/resources/app.asar/apps/server/dist/bin.mjs" "$@"`;
+   - restart only the PID in `~/.t3/ssh-launch/*/pid` after checking its args, then start
+     it the way `packages/ssh/src/tunnel.ts` does (`nohup env T3CODE_NO_BROWSER=1
+     <state dir>/run-t3.sh serve --host 127.0.0.1 --port 3773 --base-dir ~/.t3`, new PID
+     into that `pid` file), or let the desktop app reconnect. Check first that no agents
+     run under it. `run-t3.sh __ssh-helper wait-ready 3773 60000 2000` confirms it is up.
 
 ## Common mistakes
 
