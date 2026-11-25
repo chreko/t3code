@@ -2508,8 +2508,9 @@ export function AboutSettingsPanel() {
         <SettingsRow
           {...setting("privacy-policy")}
           description={
+            // This build collects no usage data, so only a policy's own notice is worth showing.
             telemetryOff === undefined
-              ? gt("How we handle your data, including the anonymous usage data T3 Code collects.")
+              ? undefined
               : gt("How we handle your data. {telemetryOff}", { telemetryOff })
           }
           control={

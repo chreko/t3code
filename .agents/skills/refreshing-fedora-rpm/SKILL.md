@@ -6,7 +6,7 @@ description: Use when the Fedora build branch (local/fedora-build-no-connect) sh
 # Refreshing the Fedora RPM
 
 `local/fedora-build-no-connect` is `origin/main` plus a few local commits: T3 Connect
-hard-disabled, the configured-model default, terminal middle-click and host-clipboard
+hard-disabled, product analytics off, the configured-model default, terminal middle-click and host-clipboard
 paste, a 30 s remote auth timeout, and one cherry-picked upstream PR that shows symlinks
 in the path picker (#8281; closed 2026-10-28 in favour of #26168, still open 2026-11-10). The Files-tree pick (#21920) is
 retired: it landed upstream as a3cf3f0fe7. On top of it the fork still lists links that
@@ -61,6 +61,10 @@ hunk, check whether upstream now does the same thing. Two patches have been reti
 that way, and taking upstream's side is the right resolution when it happens.
 
 - `apps/*/src/cloud/publicConfig.ts`, `DesktopClerk.ts`: keep the hard-disabled constants.
+- `apps/server/src/server.ts`: keep `AnalyticsService.layerDisabled` in the runtime layer,
+  even if upstream changes what the real `layer` needs. The Welcome page has no usage-data
+  notice and Settings → Legal shows only a policy's notice; a new upstream mention of
+  collected usage data gets the same treatment.
 - `ChatComposer.tsx`: resolve hunk by hunk, never `git checkout --theirs` on the whole
   file. The configured model default reaches model selection through
   `useComposerProviderModel` (its `environmentId`/`cwd` inputs, then

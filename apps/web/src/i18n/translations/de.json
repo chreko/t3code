@@ -4037,6 +4037,7 @@
   "7c1d4c58aeb9e1b3": "Kontext: {used} % genutzt",
   "4214d97447ddd9e9": "Kontext: {usedTokens} Tokens genutzt",
   "66be4fb43249bbd2": "{used} von {max} Tokens",
+  "47233ef369410b52": "Kontext komprimieren",
   "ee3ae58c8b38a425": "{left} % übrig",
   "ebb26f93fb83a71b": "{label}: {left} % übrig",
   "728c6cc1431e76c8": "Wird in {duration} zurückgesetzt · {time}",
@@ -5960,26 +5961,6 @@
   ],
   "216ab7514aea1d61": "Ohne Agenten starten",
   "501ce2d99da8bfd1": "Richte einen Agenten ein, um zu starten.",
-  "71f3822326109c8e": [
-    "T3 Code erfasst anonyme Nutzungsdaten, um die App zu verbessern. Wie du widersprichst, steht in der",
-    " ",
-    {
-      "t": "a",
-      "i": 1,
-      "c": "Datenschutzerklärung"
-    },
-    "."
-  ],
-  "b33f35083757b42c": [
-    "Siehe",
-    " ",
-    {
-      "t": "a",
-      "i": 1,
-      "c": "Datenschutzerklärung"
-    },
-    "."
-  ],
   "f77d000c0710f066": "Aktivieren",
   "4ed27bf946e504db": "Einrichten",
   "7a26eaacff0607f7": [
@@ -9810,7 +9791,6 @@
   "c424bee294b9f778": "Diese Umgebung wird von {organization} verwaltet. Einige Einstellungen und Funktionen folgen deren Richtlinie.",
   "82d9538af590f58c": "Sieh deine Agenten, importiere Projekte und richte dein Smartphone ein.",
   "6a48fd0a37e725a1": "Rechtliches",
-  "d6d3ea46ac979e1c": "Wie wir mit deinen Daten umgehen, einschließlich der anonymen Nutzungsdaten, die T3 Code erfasst.",
   "e741b1ab9396053a": "Wie wir mit deinen Daten umgehen. {telemetryOff}",
   "0bffbbf4d7f780c0": "Hinweise zu Abhängigkeiten, Assets und optionalen Tools, die T3 Code verwendet.",
   "e39a57514be028e9": "Review",

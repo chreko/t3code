@@ -362,3 +362,15 @@ export const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(AnalyticsService, make);
+
+// This build sends no product analytics. The server wires this layer instead of `layer`, so
+// no T3CODE_TELEMETRY_* or T3CODE_POSTHOG_* value can turn delivery back on, and no install
+// identity is read or created for it.
+export const layerDisabled = Layer.succeed(
+  AnalyticsService,
+  AnalyticsService.of({
+    record: Effect.fn("AnalyticsService.record")(() => Effect.void),
+    flush: Effect.void,
+    recordOwners: Effect.fn("AnalyticsService.recordOwners")(() => Effect.void),
+  }),
+);

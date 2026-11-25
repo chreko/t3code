@@ -4036,6 +4036,7 @@
   "7c1d4c58aeb9e1b3": "Context: {used}% used",
   "4214d97447ddd9e9": "Context: {usedTokens} tokens used",
   "66be4fb43249bbd2": "{used} of {max} tokens",
+  "47233ef369410b52": "Compact context",
   "ee3ae58c8b38a425": "{left}% left",
   "ebb26f93fb83a71b": "{label}: {left}% left",
   "728c6cc1431e76c8": "Resets in {duration} · {time}",
@@ -5963,26 +5964,6 @@
   ],
   "216ab7514aea1d61": "Start without an agent",
   "501ce2d99da8bfd1": "Set up one agent to start.",
-  "71f3822326109c8e": [
-    "T3 Code collects anonymous usage data to improve the app. To opt out, see the",
-    " ",
-    {
-      "t": "a",
-      "i": 1,
-      "c": "privacy policy"
-    },
-    "."
-  ],
-  "b33f35083757b42c": [
-    "See the",
-    " ",
-    {
-      "t": "a",
-      "i": 1,
-      "c": "privacy policy"
-    },
-    "."
-  ],
   "f77d000c0710f066": "Turn on",
   "4ed27bf946e504db": "Set up",
   "7a26eaacff0607f7": [
@@ -9819,7 +9800,6 @@
   "c424bee294b9f778": "This environment is managed by {organization}. Some settings and features follow its policy.",
   "82d9538af590f58c": "See your agents, import projects, and set up your phone.",
   "6a48fd0a37e725a1": "Legal",
-  "d6d3ea46ac979e1c": "How we handle your data, including the anonymous usage data T3 Code collects.",
   "e741b1ab9396053a": "How we handle your data. {telemetryOff}",
   "0bffbbf4d7f780c0": "Notices for dependencies, assets, and optional tools used by T3 Code.",
   "e39a57514be028e9": "Review",
